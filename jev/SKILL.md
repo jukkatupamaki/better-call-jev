@@ -24,7 +24,7 @@ Several questions can go in one request against the same state.
 ## Setup
 
 - Node 18+.
-- `JEV_API_KEY` in the environment. If it only lives in a `.env` file, run `env $(cat .env) node ...` in one command.
+- `JEV_API_KEY` in the environment. If it only lives in a `.env` file, run `env $(cat .env) node ...` in one command. The key is a Vercel AI Gateway key, created in the Vercel dashboard under AI Gateway. That is the only place the provider matters; the CLI, module, and output are provider-neutral.
 - The script is `scripts/jev.mjs` next to this file. Resolve it against this skill's directory, for example `~/.claude/skills/jev/scripts/jev.mjs`.
 - `--help` prints the full flag reference.
 
