@@ -7,6 +7,10 @@ description: Ask TypeSafe AI's Jev evaluation model fast, typed questions about 
 
 Jev is an *evaluation* model, not a chat model. It takes a `state` (text, object, or array) and one or more typed questions, and returns calibrated probabilities. It is cheap (input tokens only, ~$0.04/M) and fast (~200 ms), so use it liberally for decisions in code and in your own workflow.
 
+## What a typed question is
+
+A typed question declares the shape of its answer up front, so code can consume the result directly instead of parsing prose. You give a `type`, plain-language `instructions`, and optionally `criteria`; the answer comes back as validated data of that type. Jev does not generate tokens. It evaluates every question in parallel against the `state` and returns a probability distribution over the declared answers, which is why each answer carries calibrated uncertainty. Think of `state` as the evidence, a question as a function signature over that evidence, and the answer as a value of the declared return type with a probability attached. Jev cannot explain itself or return anything outside the declared types.
+
 Three question types:
 
 | Type | Give | Get back |
