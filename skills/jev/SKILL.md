@@ -1,86 +1,120 @@
 ---
 name: jev
-description: Ask TypeSafe AI's Jev evaluation model fast, typed questions about any text or JSON state. Use when you need a yes/no probability, a classification/routing choice, or a rubric score over some input (a diff, a log, a ticket, a transcript, an agent output) instead of free-form LLM text. Triggers on "classify", "route", "score", "grade", "is this X?", "judge", "verify", "LLM-as-judge", "jev".
+description: Fast, calibrated second opinion for judgment calls that come up while coding. Use it as part of your own reasoning whenever you are about to decide something about code by intuition: is this diff risky, does this change satisfy the request, is this test failure caused by my change, which of these files is the right place, is this error message actionable, does this PR description match the diff, does this function need a test, is this issue a bug or a feature request. Also for grading or verifying outputs from subagents, reviewing candidate commit messages, and triaging logs, test output, or issues. Jev returns a probability or a choice, not text, in a few hundred ms. Triggers on "should I", "is this safe", "which one", "does this match", "verify", "grade", "score", "classify", "route", "triage", "judge", "jev".
 ---
 
-# Jev evaluation
+# Jev: typed judgment calls while coding
 
-Jev is an *evaluation* model, not a chat model. It takes a `state` (text, object, or array) and one or more typed questions, and returns calibrated probabilities. It is cheap (input tokens only) and fast (a few hundred ms), so use it liberally for decisions in code and in your own workflow. Context window is 32k tokens.
+Jev is an evaluation model, not a chat model. It takes a `state` (text or JSON) and typed questions, and returns calibrated probabilities instead of prose. It costs a fraction of a cent, answers in a few hundred ms, and evaluates several questions in one round trip. The point of this skill is not to add a tool you call when a user asks for it. It is a habit: when you notice yourself about to *guess* about code, ask Jev instead, then act on the number.
 
-## What a typed question is
+## When to reach for it
 
-A typed question declares the shape of its answer up front, so code can consume the result directly instead of parsing prose. You give a `type`, plain-language `instructions`, and optionally `criteria`; the answer comes back as validated data of that type. Jev does not generate tokens. It evaluates every question in parallel against the `state` and returns a probability distribution over the declared answers, which is why each answer carries calibrated uncertainty. Think of `state` as the evidence, a question as a function signature over that evidence, and the answer as a value of the declared return type with a probability attached. Jev cannot explain itself or return anything outside the declared types.
+Reach for Jev at the moments in a coding task where you would otherwise rely on a gut feeling. The pattern is the same each time: you have concrete evidence (a diff, a file, a log, a test result, a request), and a question with a small answer space.
 
-## Question types
+**Before acting**
 
-| Type | You give | You get back |
-|---|---|---|
-| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1 |
-| `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities` per option, `confidence` |
-| `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` in 0..(rungs-1), `probabilities` keyed by rung index `"0".."n-1"`, `confidence` |
+- Deciding among candidate locations for a change. Ask a `choice` over the candidate files or functions, with one sentence describing each.
+- Judging whether a change is safe to make without asking the user. Ask a `score` on risk from "cosmetic" to "could lose data or break production".
+- Deciding whether a task is ambiguous enough to need a question back to the user. Ask a `boolean`: "Could two reasonable engineers implement this request differently in a way that matters?"
+- Choosing an approach when two look equivalent. Ask a `choice` between them with the trade-offs as descriptions.
 
-Several questions can go in one request against the same state.
+**After acting, before reporting**
 
-## Setup
+- Verifying your diff against the request. State is the request plus the diff; ask "Does this diff fully implement the request?" and "Does this diff change anything the request did not ask for?"
+- Checking whether a test failure is caused by your change or was pre-existing. State is the failing test output plus your diff.
+- Deciding whether a function you touched needs a new test. Ask a `boolean` with criteria for what "needs a test" means in this repo.
+- Grading a commit message or PR description against the diff.
 
-- Node 18+.
-- `JEV_API_KEY` in the environment. If it only lives in a `.env` file, run `env $(cat .env) node ...` in one command. The key is a Vercel AI Gateway key, created in the Vercel dashboard under AI Gateway. That is the only place the provider matters; the CLI, module, and output are provider-neutral.
-- The script is `scripts/jev.mjs` next to this file. Resolve it against this skill's directory, for example `~/.claude/skills/jev/scripts/jev.mjs`.
-- `--help` prints the full flag reference.
+**Triage and classification**
 
-## CLI
+- Sorting issues, log lines, or review comments into buckets. One `choice` question, many items, or one call per item.
+- Rating severity, urgency, or confidence on a rubric. `score` with named rungs.
+- Routing a task to the right subagent or tool. `choice` over the options.
+
+**Verifying other agents**
+
+- When a subagent returns a result, put the original brief and the result in state and ask whether the result answers the brief, whether it invented anything, and whether it stayed in scope. Do this before relaying the result to the user.
+
+## When not to
+
+- The question needs an explanation, not a decision. Jev cannot say why.
+- The answer space is open-ended. Jev picks from what you declare.
+- You have not gathered the evidence yet. Jev judges what is in `state`; it cannot read files or run commands. Feed it the diff, not the file path.
+- The state is larger than about 32k tokens. Trim to the relevant part.
+- The decision is trivially certain either way. Do not add a call to confirm what is obvious.
+
+## How to act on the answer
+
+- Boolean probability above 0.8 or below 0.2: treat as decided and move on. Between: gather more evidence, ask a narrower question, or surface the uncertainty to the user.
+- Choice: use `choice` when its probability is clearly ahead. If two options are close, that is itself a finding worth reporting.
+- Score: read `score` as a position on the rubric you gave. A 4-rung rubric yields 0 to 3. `confidence` tells you how peaked the distribution is.
+- Tell the user when a Jev result changed what you did, in one sentence. Do not narrate every call.
+
+## How to call it
+
+Requires Node 18+ and `JEV_API_KEY` in the environment. If the key only lives in a `.env` file, run `env $(cat .env) node ...` in one command. The key is a Vercel AI Gateway key created in the Vercel dashboard; that is the only place the provider matters. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
+
+Prefer the stdin JSON form. It handles multi-line state, structured state, and criteria without quoting problems.
 
 ```bash
-# yes/no
-node scripts/jev.mjs --state "Build failed with exit code 1" --bool "Did the build succeed?"
-# → { "q1": { "type": "boolean", "probability": 0.02 } }
-
-# named keys, several questions at once
-node scripts/jev.mjs --state "Card charged twice, want refund" \
-  --bool   "refund=Is the customer asking for money back?" \
-  --choice "route=Route this ticket" --options "billing=charges,shipping=delivery,technical=bugs" \
-  --score  "urgency=How urgent?" --scale "low,medium,high"
-
-# state from a file (paths ending in .json are parsed as structured state), inline JSON, or stdin
-node scripts/jev.mjs --state-file ticket.json --bool "Is this spam?"
-node scripts/jev.mjs --state-json '{"exitCode":1}' --bool "Did it pass?"
-git diff | node scripts/jev.mjs --score "Risk of this change" --scale "trivial,low,moderate,high,critical"
-
-# full request JSON on stdin (most flexible; use when questions need criteria the flags cannot express)
-echo '{"state": "...", "questions": {"ok": {"type": "boolean", "instructions": "...", "criteria": {"true": "...", "false": "..."}}}}' | node scripts/jev.mjs
-
-# --questions merges a raw questions object with flag-built ones
-node scripts/jev.mjs --state "..." --questions '{"ok": {"type": "boolean", "instructions": "..."}}'
+node scripts/jev.mjs <<'EOF'
+{
+  "state": {
+    "request": "Add retry to the upload client",
+    "diff": "<paste git diff here>"
+  },
+  "questions": {
+    "implements": { "type": "boolean", "instructions": "Does the diff fully implement the request?" },
+    "scopeCreep": { "type": "boolean", "instructions": "Does the diff change behaviour the request did not ask for?" },
+    "risk": {
+      "type": "score",
+      "instructions": "How risky is this change to ship?",
+      "criteria": ["cosmetic", "low: isolated, covered by tests", "moderate: touches shared code", "high: data, auth, or money paths"]
+    }
+  }
+}
+EOF
 ```
 
-Rules:
+Pipe evidence straight in when the question is simple:
 
-- Give exactly one of `--state`, `--state-file`, `--state-json`. With none, stdin is used: as the state text when question flags are present, otherwise as a full request `{state, questions}`.
-- Question keys default to `q1`, `q2`, ... unless written as `key=instructions`.
-- `--options` and `--scale` are comma-separated. `--options` takes `name=description` pairs, or plain names. `--scale` takes labels only, lowest to highest. Commas inside a description are not supported; use `--questions` or stdin JSON instead.
-- `--verbose` prints `{ answers, usage: { inputTokens, outputTokens }, requestId }` instead of just `answers`.
-- `--no-retain` asks the service not to retain the input (best effort).
-- Output is JSON on stdout. Errors go to stderr with exit code 1, prefixed with a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `unknown`.
+```bash
+git diff | node scripts/jev.mjs --score "risk=Risk of shipping this" --scale "cosmetic,low,moderate,high"
+npm test 2>&1 | tail -50 | node scripts/jev.mjs --bool "Is the failure caused by a missing dependency rather than a logic error?"
+```
 
-## As a module
+Flag reference:
+
+- State, exactly one: `--state <text>`, `--state-file <path>` (a `.json` path is parsed as structured state), `--state-json <json>`. With none, stdin is the state text when question flags are present, otherwise a full request `{state, questions}`.
+- Questions, repeatable, keys default to `q1`, `q2` unless written `key=instructions`: `--bool "<q>"`, `--choice "<q>" --options "a=desc,b=desc"`, `--score "<q>" --scale "low,mid,high"`, `--questions <json>` to merge a raw object.
+- `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
+- `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
+- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `unknown`. `--help` prints everything.
+
+Answer shapes:
+
+| Type | Give | Get |
+|---|---|---|
+| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1 |
+| `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities`, `confidence` |
+| `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
+
+As a module from Node code:
 
 ```js
 import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
-
-await ask(state, instructions, criteria?);          // → probability (number)
-await choose(state, instructions, { name: desc }); // → { choice, probabilities, confidence }
-await score(state, instructions, [low, ..., high]); // → { score, probabilities, confidence }
-await evaluate({ state, questions, retain? });      // → { answers, usage, requestId }
+await ask(state, instructions, criteria?);           // number
+await choose(state, instructions, { name: desc });  // { choice, probabilities, confidence }
+await score(state, instructions, [low, ..., high]);  // { score, probabilities, confidence }
+await evaluate({ state, questions, retain? });       // { answers, usage, requestId }
 ```
 
-All functions throw `JevError` with `.code` (see the codes above) and `.cause` holding upstream detail.
+## Writing questions that work
 
-## Writing good questions
-
-- Put the *thing being judged* in `state`, and the *question* in `instructions`. Do not paste the state into the instructions.
-- For `boolean`, add `criteria: {true: ..., false: ...}` whenever the boundary is fuzzy.
-- For `choice`, describe each option; the descriptions are what the model matches against. Include an `other` option when the input may not fit.
-- For `score`, order rungs lowest to highest and label each one. The `score` is a float across rungs, so a 4-rung scale yields 0..3.
-- Batch related questions into one call; they share the state and one round trip.
-- Treat `probability` < 0.2 or > 0.8 as decisive; in between, ask a follow-up or fall back to a chat model. Tune thresholds on your own labeled data.
-- Trim large logs or diffs to the relevant part to stay under the 32k context window.
+- Put the evidence in `state` and only the question in `instructions`. Never paste the diff into the instructions.
+- Name the keys after the decision: `implements`, `risk`, `needsTest`, not `q1`.
+- For `boolean`, add `criteria` whenever "true" is not self-evident. "Needs a test" means different things in different repos; say what it means here.
+- For `choice`, describe every option, and add `other` when the input may fit none.
+- For `score`, label every rung with a concrete description, lowest first.
+- Batch the questions you have about the same evidence into one call.
+- Structured state beats a blob. `{ request, diff, testOutput }` lets the model find each part.
