@@ -1,13 +1,17 @@
 # jev
 
-Zero-dependency wrapper for [TypeSafe AI's Jev](https://vercel.com/ai-gateway/models/jev) evaluation model on Vercel AI Gateway, packaged as a Claude Code skill.
+Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation model, packaged as a Claude Code skill.
 
-- `jev/SKILL.md` describes the skill to Claude.
-- `jev/scripts/jev.mjs` is the wrapper: a CLI and an ES module. Node 18+, no npm install.
+- `jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
+- `jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
+
+## Setup
+
+Set `JEV_API_KEY` in your environment. Never commit it; a gitignored `.env` file works.
+
+Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
 
 ## Use in other projects
-
-Set `AI_GATEWAY_API_KEY` (or `VERCEL_AI_GATEWAY_KEY`) in the environment, then install the skill either globally or per project:
 
 ```bash
 # global: available in every project
@@ -23,8 +27,5 @@ Copy instead of symlink if the project should vendor its own copy. Then `/jev` i
 ## Quick check
 
 ```bash
-export $(cat .env)
-node jev/scripts/jev.mjs --state "Card charged twice" --bool "Is the customer asking for a refund?"
+env $(cat .env) node jev/scripts/jev.mjs --state "Card charged twice" --bool "Is the customer asking for a refund?"
 ```
-
-See `jev/SKILL.md` for the full CLI and module API.

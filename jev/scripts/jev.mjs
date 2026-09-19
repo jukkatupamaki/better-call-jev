@@ -1,64 +1,107 @@
 #!/usr/bin/env node
-// Lightweight wrapper for TypeSafe AI's Jev evaluation model via Vercel AI Gateway.
+// Lightweight client for TypeSafe AI's Jev evaluation model.
 // Zero dependencies. Requires Node 18+ (global fetch).
-//
 // Usable as a CLI or as an ES module (`import { evaluate } from './jev.mjs'`).
+//
+// The transport (currently Vercel AI Gateway) is an implementation detail
+// confined to the "Transport" section below. Nothing caller-facing names it.
 
-const GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://ai-gateway.vercel.sh/v1/evaluate';
-const MODEL = process.env.JEV_MODEL || 'typesafe-ai/jev';
+// Transport --------------------------------------------------------------------
+
+const ENDPOINT = process.env.JEV_ENDPOINT || 'https://ai-gateway.vercel.sh/v1/evaluate';
+const MODEL_SLUG = 'typesafe-ai/jev';
 
 function apiKey() {
-  const key = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_KEY;
-  if (!key) {
-    throw new Error('Missing API key: set AI_GATEWAY_API_KEY (or VERCEL_AI_GATEWAY_KEY).');
-  }
+  const key = process.env.JEV_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_KEY;
+  if (!key) throw new JevError('auth', 'Missing API key: set JEV_API_KEY.');
   return key;
+}
+
+function classify(status) {
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 429) return 'rate_limited';
+  if (status >= 400 && status < 500) return 'bad_request';
+  if (status >= 500) return 'unavailable';
+  return 'unknown';
+}
+
+async function transport({ state, questions, retain }) {
+  const body = { model: MODEL_SLUG, state, questions };
+  if (retain === false) body.providerOptions = { gateway: { zeroDataRetention: true } };
+
+  const key = apiKey();
+  let res;
+  try {
+    res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (cause) {
+    throw new JevError('unavailable', 'Could not reach the Jev service.', { cause });
+  }
+
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = null; }
+
+  if (!res.ok) {
+    const upstream = data?.error?.message || data?.message || text;
+    const code = classify(res.status);
+    throw new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
+  }
+  if (!data?.answers) {
+    throw new JevError('unknown', 'Jev returned an unexpected response.', { cause: data ?? text });
+  }
+
+  return {
+    answers: data.answers,
+    usage: {
+      inputTokens: data.usage?.inputTokens ?? null,
+      outputTokens: data.usage?.outputTokens ?? null,
+    },
+    requestId: data.providerMetadata?.gateway?.generationId ?? null,
+  };
+}
+
+// Public API ---------------------------------------------------------------------
+
+export class JevError extends Error {
+  /** @param {'auth'|'bad_request'|'rate_limited'|'unavailable'|'unknown'} code */
+  constructor(code, message, { status, cause } = {}) {
+    super(message, cause !== undefined ? { cause } : undefined);
+    this.name = 'JevError';
+    this.code = code;
+    if (status !== undefined) this.status = status;
+  }
 }
 
 /**
  * Evaluate `state` against typed `questions`.
  *
  * @param {object} opts
- * @param {string|object|any[]} opts.state       The shared state to evaluate (text, object, or array).
- * @param {Record<string, Question>} opts.questions  Keyed questions. Types: boolean | choice | score.
- * @param {object} [opts.providerOptions]        Passed through, e.g. { gateway: { zeroDataRetention: true } }.
- * @param {string} [opts.model]                  Defaults to typesafe-ai/jev.
- * @returns {Promise<{ model: string, answers: Record<string, Answer>, usage: object, providerMetadata: object }>}
+ * @param {string|object|any[]} opts.state          What is being judged: text, object, or array.
+ * @param {Record<string, Question>} opts.questions Keyed questions. Types: boolean | choice | score.
+ * @param {boolean} [opts.retain=true]              false asks the service not to retain the input (best effort).
+ * @returns {Promise<{ answers: Record<string, Answer>, usage: { inputTokens: number|null, outputTokens: number|null }, requestId: string|null }>}
+ * @throws {JevError}
  *
  * @typedef {{ type: 'boolean', instructions: string, criteria?: { true: string, false: string } }
  *         | { type: 'choice',  instructions: string, criteria: Record<string, string> }
  *         | { type: 'score',   instructions: string, criteria: string[] }} Question
  * @typedef {{ type: 'boolean', probability: number }
- *         | { type: 'choice',  choice: string, probabilities: Record<string, number> }
- *         | { type: 'score',   score: number,  probabilities: Record<string, number> }} Answer
+ *         | { type: 'choice',  choice: string, probabilities: Record<string, number>, confidence: number }
+ *         | { type: 'score',   score: number,  probabilities: Record<string, number>, confidence: number }} Answer
  */
-export async function evaluate({ state, questions, providerOptions, model = MODEL }) {
-  if (state === undefined) throw new Error('`state` is required.');
-  if (!questions || Object.keys(questions).length === 0) throw new Error('At least one question is required.');
-
-  const body = { model, state, questions };
-  if (providerOptions) body.providerOptions = providerOptions;
-
-  const res = await fetch(GATEWAY_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-  if (!res.ok) {
-    const msg = data?.error?.message || data?.message || text;
-    throw new Error(`Gateway error ${res.status}: ${msg}`);
+export async function evaluate({ state, questions, retain = true }) {
+  if (state === undefined) throw new JevError('bad_request', '`state` is required.');
+  if (!questions || Object.keys(questions).length === 0) {
+    throw new JevError('bad_request', 'At least one question is required.');
   }
-  return data;
+  return transport({ state, questions, retain });
 }
 
-// Convenience helpers -------------------------------------------------------
-
-/** Boolean question → probability of true (0..1). */
+/** Boolean question → probability of true (0..1). `criteria` is optional { true, false }. */
 export async function ask(state, instructions, criteria) {
   const q = { type: 'boolean', instructions };
   if (criteria) q.criteria = criteria;
@@ -66,47 +109,48 @@ export async function ask(state, instructions, criteria) {
   return r.answers.q.probability;
 }
 
-/** Choice question → { choice, probabilities }. `options` is { name: description }. */
+/** Choice question → { choice, probabilities, confidence }. `options` is { name: description }. */
 export async function choose(state, instructions, options) {
   const r = await evaluate({ state, questions: { q: { type: 'choice', instructions, criteria: options } } });
   return r.answers.q;
 }
 
-/** Score question → { score, probabilities }. `scale` is ordered lowest → highest. */
+/** Score question → { score, probabilities, confidence }. `scale` is ordered lowest → highest. */
 export async function score(state, instructions, scale) {
   const r = await evaluate({ state, questions: { q: { type: 'score', instructions, criteria: scale } } });
   return r.answers.q;
 }
 
-// CLI -----------------------------------------------------------------------
+// CLI ------------------------------------------------------------------------------
 
 const USAGE = `Usage:
-  jev.mjs --state <text> [--state-file <path>] <question flags> [--raw] [--zdr]
+  jev.mjs [state] <question flags> [--verbose] [--no-retain]
   echo '{"state": ..., "questions": {...}}' | jev.mjs        (full request on stdin)
 
-State (one of):
+State (give exactly one; if none, stdin is used):
   --state <text>            Inline text
-  --state-file <path>       File contents (JSON files are parsed as structured state)
-  --state-json <json>       Structured state as JSON
-  (stdin)                   If no --state* flag: stdin is either a full request JSON
-                            ({state, questions}) or, when question flags are given, raw state text
+  --state-file <path>       File contents; a path ending in .json is parsed as structured state
+  --state-json <json>       Structured state inline
+  (stdin)                   With question flags: stdin is the state text.
+                            Without question flags: stdin is a full request {state, questions}.
 
-Questions (repeatable, each gets key q1, q2, ... unless prefixed with key=):
-  --bool   "[key=]<instructions>"                       boolean → probability
-  --choice "[key=]<instructions>" --options a=desc,b=desc   choice  → choice + probabilities
-  --score  "[key=]<instructions>" --scale low,mid,high      score   → score + probabilities
-  --questions <json>        Raw questions object (advanced / mixed)
+Questions (repeatable; keys default to q1, q2, ... unless written as key=instructions):
+  --bool   "[key=]<instructions>"
+  --choice "[key=]<instructions>" --options "a=desc a,b=desc b"   (plain "a,b" uses names as descriptions)
+  --score  "[key=]<instructions>" --scale  "low,medium,high"       (labels only, lowest → highest)
+  --questions <json>        Raw questions object, merged with the flags above
+  Note: --options and --scale are comma-separated; commas inside a description are not supported.
 
 Options:
-  --raw                     Print full gateway response (usage, cost, routing)
-  --zdr                     Request zero data retention
-  --model <id>              Override model (default ${MODEL})
+  --verbose                 Print { answers, usage, requestId } instead of just answers
+  --no-retain               Ask the service not to retain the input (best effort)
   -h, --help
 
-Env: AI_GATEWAY_API_KEY or VERCEL_AI_GATEWAY_KEY (required)`;
+Env: JEV_API_KEY (required)
+
+Exit codes: 0 ok, 1 error (message on stderr)`;
 
 function parseKV(s) {
-  // "a=desc a,b=desc b" → { a: 'desc a', b: 'desc b' }; plain "a,b" → { a: 'a', b: 'b' }
   const out = {};
   for (const part of s.split(',')) {
     const i = part.indexOf('=');
@@ -147,9 +191,8 @@ async function main(argv) {
 
   if (has('-h') || has('--help')) { console.log(USAGE); return; }
 
-  const raw = has('--raw');
-  const zdr = has('--zdr');
-  const model = next('--model') || MODEL;
+  const verbose = has('--verbose');
+  const retain = !has('--no-retain');
 
   // Questions
   const questions = {};
@@ -162,23 +205,26 @@ async function main(argv) {
   while ((v = next('--choice')) !== undefined) {
     const [key, instructions] = splitKey(v, `q${++n}`);
     const opts = next('--options');
-    if (!opts) throw new Error('--choice requires --options a=desc,b=desc');
+    if (!opts) throw new Error('--choice requires --options "a=desc,b=desc"');
     questions[key] = { type: 'choice', instructions, criteria: parseKV(opts) };
   }
   while ((v = next('--score')) !== undefined) {
     const [key, instructions] = splitKey(v, `q${++n}`);
     const scale = next('--scale');
-    if (!scale) throw new Error('--score requires --scale low,mid,high');
+    if (!scale) throw new Error('--score requires --scale "low,medium,high"');
     questions[key] = { type: 'score', instructions, criteria: scale.split(',').map((s) => s.trim()) };
   }
   const qjson = next('--questions');
   if (qjson) Object.assign(questions, JSON.parse(qjson));
 
   // State
-  let state;
   const sText = next('--state');
   const sFile = next('--state-file');
   const sJson = next('--state-json');
+  const given = [sText, sFile, sJson].filter((x) => x !== undefined).length;
+  if (given > 1) throw new Error('Give only one of --state, --state-file, --state-json.');
+
+  let state;
   if (sJson !== undefined) state = JSON.parse(sJson);
   else if (sFile !== undefined) {
     const { readFileSync } = await import('node:fs');
@@ -199,9 +245,8 @@ async function main(argv) {
 
   if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}\n\n${USAGE}`);
 
-  const providerOptions = zdr ? { gateway: { zeroDataRetention: true } } : undefined;
-  const result = await evaluate({ state, questions, providerOptions, model });
-  console.log(JSON.stringify(raw ? result : result.answers, null, 2));
+  const result = await evaluate({ state, questions, retain });
+  console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
 }
 
 async function isCli() {
