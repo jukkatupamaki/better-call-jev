@@ -10,6 +10,7 @@
 
 const ENDPOINT = process.env.JEV_ENDPOINT || 'https://ai-gateway.vercel.sh/v1/evaluate';
 const MODEL_SLUG = 'typesafe-ai/jev';
+const DEFAULT_TIMEOUT_MS = Number(process.env.JEV_TIMEOUT_MS) || 8000;
 
 function apiKey() {
   const key = process.env.JEV_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_KEY;
@@ -25,7 +26,7 @@ function classify(status) {
   return 'unknown';
 }
 
-async function transport({ state, questions, retain }) {
+async function transport({ state, questions, retain, timeoutMs }) {
   const body = { model: MODEL_SLUG, state, questions };
   if (retain === false) body.providerOptions = { gateway: { zeroDataRetention: true } };
 
@@ -34,10 +35,14 @@ async function transport({ state, questions, retain }) {
   try {
     res = await fetch(ENDPOINT, {
       method: 'POST',
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
   } catch (cause) {
+    if (cause?.name === 'TimeoutError' || cause?.name === 'AbortError') {
+      throw new JevError('timeout', `Jev did not answer within ${timeoutMs} ms.`, { cause });
+    }
     throw new JevError('unavailable', 'Could not reach the Jev service.', { cause });
   }
 
@@ -67,7 +72,7 @@ async function transport({ state, questions, retain }) {
 // Public API ---------------------------------------------------------------------
 
 export class JevError extends Error {
-  /** @param {'auth'|'bad_request'|'rate_limited'|'unavailable'|'unknown'} code */
+  /** @param {'auth'|'bad_request'|'rate_limited'|'unavailable'|'timeout'|'unknown'} code */
   constructor(code, message, { status, cause } = {}) {
     super(message, cause !== undefined ? { cause } : undefined);
     this.name = 'JevError';
@@ -83,6 +88,7 @@ export class JevError extends Error {
  * @param {string|object|any[]} opts.state          What is being judged: text, object, or array.
  * @param {Record<string, Question>} opts.questions Keyed questions. Types: boolean | choice | score.
  * @param {boolean} [opts.retain=true]              false asks the service not to retain the input (best effort).
+ * @param {number}  [opts.timeoutMs=8000]           Abort and throw JevError('timeout') after this many ms. Env JEV_TIMEOUT_MS sets the default.
  * @returns {Promise<{ answers: Record<string, Answer>, usage: { inputTokens: number|null, outputTokens: number|null }, requestId: string|null }>}
  * @throws {JevError}
  *
@@ -93,12 +99,12 @@ export class JevError extends Error {
  *         | { type: 'choice',  choice: string, probabilities: Record<string, number>, confidence: number }
  *         | { type: 'score',   score: number,  probabilities: Record<string, number>, confidence: number }} Answer
  */
-export async function evaluate({ state, questions, retain = true }) {
+export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   if (state === undefined) throw new JevError('bad_request', '`state` is required.');
   if (!questions || Object.keys(questions).length === 0) {
     throw new JevError('bad_request', 'At least one question is required.');
   }
-  return transport({ state, questions, retain });
+  return transport({ state, questions, retain, timeoutMs });
 }
 
 /** Boolean question → probability of true (0..1). `criteria` is optional { true, false }. */
@@ -144,9 +150,10 @@ Questions (repeatable; keys default to q1, q2, ... unless written as key=instruc
 Options:
   --verbose                 Print { answers, usage, requestId } instead of just answers
   --no-retain               Ask the service not to retain the input (best effort)
+  --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
   -h, --help
 
-Env: JEV_API_KEY (required)
+Env: JEV_API_KEY (required), JEV_TIMEOUT_MS (optional)
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 
@@ -193,6 +200,9 @@ async function main(argv) {
 
   const verbose = has('--verbose');
   const retain = !has('--no-retain');
+  const timeoutArg = next('--timeout');
+  const timeoutMs = timeoutArg !== undefined ? Number(timeoutArg) : DEFAULT_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('--timeout must be a positive number of milliseconds');
 
   // Questions
   const questions = {};
@@ -245,7 +255,7 @@ async function main(argv) {
 
   if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}\n\n${USAGE}`);
 
-  const result = await evaluate({ state, questions, retain });
+  const result = await evaluate({ state, questions, retain, timeoutMs });
   console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
 }
 

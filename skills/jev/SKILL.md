@@ -91,7 +91,8 @@ Flag reference:
 - Questions, repeatable, keys default to `q1`, `q2` unless written `key=instructions`: `--bool "<q>"`, `--choice "<q>" --options "a=desc,b=desc"`, `--score "<q>" --scale "low,mid,high"`, `--questions <json>` to merge a raw object.
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
 - `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
-- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `unknown`. `--help` prints everything.
+- `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgment and mark the decision unverified.
+- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
 
 Answer shapes:
 
@@ -108,7 +109,7 @@ import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
 await ask(state, instructions, criteria?);           // number
 await choose(state, instructions, { name: desc });  // { choice, probabilities, confidence }
 await score(state, instructions, [low, ..., high]);  // { score, probabilities, confidence }
-await evaluate({ state, questions, retain? });       // { answers, usage, requestId }
+await evaluate({ state, questions, retain?, timeoutMs? }); // { answers, usage, requestId }
 ```
 
 ## Writing questions that work

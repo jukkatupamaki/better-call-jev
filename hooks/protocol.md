@@ -33,4 +33,8 @@ Jev picks among options you declare. Generating code, prose, or an open-ended an
 
 ## Reporting
 
-When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls. If `JEV_API_KEY` is missing or the service is unreachable, say so once, then fall back to your own judgment for the rest of the session and mark every such decision as unverified.
+When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls.
+
+## Degraded service
+
+Jev must never slow you down. Calls time out after 8 seconds by default and exit with code `timeout`. On a `timeout`, `unavailable`, or `rate_limited` error: do not retry that call, decide it yourself, and mark the decision unverified in your report. If two consecutive calls fail this way, stop calling Jev for the rest of the session, say so once, and mark every later judgment unverified. If `JEV_API_KEY` is missing, say so once and proceed the same way.
