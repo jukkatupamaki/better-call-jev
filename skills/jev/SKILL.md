@@ -5,7 +5,9 @@ description: Fast, calibrated second opinion for judgment calls that come up whi
 
 # Jev: typed judgment calls while coding
 
-Jev is an evaluation model, not a chat model. It takes a `state` (text or JSON) and typed questions, and returns calibrated probabilities instead of prose. It costs a fraction of a cent, answers in a few hundred ms, and evaluates several questions in one round trip. The point of this skill is not to add a tool you call when a user asks for it. It is a habit: when you notice yourself about to *guess* about code, ask Jev instead, then act on the number.
+Jev is an evaluation model, not a chat model. It takes a `state` (text or JSON) and typed questions, and returns calibrated probabilities instead of prose. It costs a fraction of a cent, answers in a few hundred ms, and evaluates several questions in one round trip.
+
+When this plugin is loaded, a session-start hook installs the Jev decision protocol: every judgment call that is not mechanically determined by the code or the user's words is delegated to Jev. You frame the options and gather the evidence, Jev decides, you act. This file is the reference for doing that well.
 
 ## When to reach for it
 

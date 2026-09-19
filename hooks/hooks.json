@@ -1,0 +1,16 @@
+{
+  "description": "Loads the Jev decision protocol into every session so all judgment calls are routed through Jev.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat \"${CLAUDE_PLUGIN_ROOT}/hooks/protocol.md\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

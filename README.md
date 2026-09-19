@@ -5,6 +5,7 @@ Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation m
 - `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
 - `skills/jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
 - `.claude-plugin/` holds the plugin manifest and a single-plugin marketplace, so this repo installs directly.
+- `hooks/` holds a SessionStart hook that loads `hooks/protocol.md` into every session. With the plugin installed, Claude delegates all judgment calls to Jev rather than deciding by intuition. Remove or edit the hook if you want the skill available without the always-on rule.
 
 ## Setup
 
