@@ -3,3 +3,6 @@
 .env.*
 !.env.example
 !.env.sample
+
+# Claude Code local settings (may hold keys)
+.claude/settings.local.json
