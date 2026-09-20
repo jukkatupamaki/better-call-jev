@@ -616,25 +616,21 @@
     </div>
 
     <div class="r">
-      <h3>Or call it directly</h3>
+      <h3>Then just ask</h3>
       <div class="code">
         <button class="copy" type="button" aria-label="Copy to clipboard">copy</button>
-        <pre><span class="p">node</span> skills/jev/scripts/jev.mjs &lt;&lt;<span class="s">'EOF'</span>
-{
-  <span class="n">"state"</span>: { <span class="n">"spec"</span>: <span class="s">"&lt;the request&gt;"</span>, <span class="n">"artifact"</span>: <span class="s">"&lt;the diff&gt;"</span> },
-  <span class="n">"questions"</span>: {
-    <span class="n">"satisfies"</span>:   { <span class="n">"type"</span>: <span class="s">"boolean"</span>, <span class="n">"instructions"</span>: <span class="s">"Does the artifact fully satisfy the spec?"</span> },
-    <span class="n">"overreaches"</span>: { <span class="n">"type"</span>: <span class="s">"boolean"</span>, <span class="n">"instructions"</span>: <span class="s">"Does it do things the spec did not ask for?"</span> },
-    <span class="n">"quality"</span>: {
-      <span class="n">"type"</span>: <span class="s">"score"</span>,
-      <span class="n">"instructions"</span>: <span class="s">"Overall quality against the spec"</span>,
-      <span class="n">"criteria"</span>: [<span class="s">"unusable"</span>, <span class="s">"needs major rework"</span>, <span class="s">"needs minor fixes"</span>, <span class="s">"ready"</span>]
-    }
-  }
-}
-<span class="s">EOF</span></pre>
+        <pre><span class="p">/jev</span> does this diff do what the issue asked, nothing more?
+<span class="c">satisfies    0.91  yes
+overreaches  0.07  no</span>
+
+<span class="p">/jev</span> which team owns this bug: billing, infra, or auth?
+<span class="c">infra        0.84</span>
+
+<span class="p">/jev</span> rate the risk of shipping this: cosmetic, low, moderate, high
+<span class="c">risk         moderate (2 / 3)</span></pre>
       </div>
-      <p class="note">Full reference, per-domain recipes and CLI flags: <a href="https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md">the skill file</a>. For machines: <a href="/llms.txt">/llms.txt</a>.</p>
+      <p class="note">Claude gathers the evidence, writes the typed questions, calls Jev, and acts on the number. With the plugin installed it also does this on its own whenever it has to judge something.</p>
+      <p class="note">Full reference, per-domain recipes, the raw CLI and module API: <a href="https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md">the skill file</a>. For machines: <a href="/llms.txt">/llms.txt</a>.</p>
     </div>
   </div>
 </section>
