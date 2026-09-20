@@ -36,6 +36,12 @@
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.JEV_TIMEOUT_MS) || 8000;
 
+// Decision thresholds for boolean answers. A probability at or above `high` is a
+// decided yes, at or below `low` a decided no, anything between is undecided.
+// Defaults 0.8 / 0.2. Override per environment with JEV_THRESHOLD_HIGH and
+// JEV_THRESHOLD_LOW, or per call with --thresholds "high,low" / { thresholds }.
+const DEFAULT_THRESHOLDS = Object.freeze({ high: 0.8, low: 0.2 });
+
 const PROVIDERS = {
   vercel: {
     label: 'Vercel AI Gateway',
@@ -211,6 +217,40 @@ export async function score(state, instructions, scale) {
   return r.answers.q;
 }
 
+/**
+ * Resolve decision thresholds: explicit values, then env, then the 0.8 / 0.2 default.
+ * @param {{ high?: number, low?: number }} [override]
+ * @returns {{ high: number, low: number }}
+ * @throws {JevError} bad_request when a value is not a number or the two do not satisfy 0 <= low < high <= 1.
+ */
+export function thresholds(override = {}) {
+  const pick = (name, envName, fallback) => {
+    const raw = override[name] ?? process.env[envName];
+    if (raw === undefined || raw === '') return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new JevError('bad_request', `Threshold ${name} must be a number between 0 and 1, got "${raw}".`);
+    return n;
+  };
+  const t = { high: pick('high', 'JEV_THRESHOLD_HIGH', DEFAULT_THRESHOLDS.high), low: pick('low', 'JEV_THRESHOLD_LOW', DEFAULT_THRESHOLDS.low) };
+  if (!(t.low >= 0 && t.low < t.high && t.high <= 1)) {
+    throw new JevError('bad_request', `Thresholds must satisfy 0 <= low < high <= 1, got low=${t.low} high=${t.high}.`);
+  }
+  return t;
+}
+
+/**
+ * Turn a boolean probability into a decision under the given thresholds.
+ * @param {number} probability
+ * @param {{ high?: number, low?: number }} [t] Defaults to thresholds().
+ * @returns {'yes'|'no'|'undecided'}
+ */
+export function verdict(probability, t) {
+  const { high, low } = t && 'high' in t && 'low' in t ? t : thresholds(t);
+  if (probability >= high) return 'yes';
+  if (probability <= low) return 'no';
+  return 'undecided';
+}
+
 // CLI ------------------------------------------------------------------------------
 
 const USAGE = `Usage:
@@ -235,10 +275,13 @@ Options:
   --verbose                 Print { answers, usage, requestId } instead of just answers
   --no-retain               Ask the service not to retain the input (best effort)
   --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
+  --thresholds <high,low>   Decision thresholds for boolean answers (default ${DEFAULT_THRESHOLDS.high},${DEFAULT_THRESHOLDS.low},
+                            env JEV_THRESHOLD_HIGH / JEV_THRESHOLD_LOW). Each boolean answer gets a
+                            "verdict": "yes" at or above high, "no" at or below low, else "undecided".
   --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_ENDPOINT (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT (optional)
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 
@@ -289,6 +332,15 @@ async function main(argv) {
   const timeoutArg = next('--timeout');
   const timeoutMs = timeoutArg !== undefined ? Number(timeoutArg) : DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('--timeout must be a positive number of milliseconds');
+  const thresholdsArg = next('--thresholds');
+  let t;
+  if (thresholdsArg !== undefined) {
+    const parts = thresholdsArg.split(',').map((x) => x.trim());
+    if (parts.length !== 2) throw new Error('--thresholds must be "high,low", for example 0.8,0.2');
+    t = thresholds({ high: parts[0], low: parts[1] });
+  } else {
+    t = thresholds();
+  }
 
   // Questions
   const questions = {};
@@ -342,6 +394,9 @@ async function main(argv) {
   if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}\n\n${USAGE}`);
 
   const result = await evaluate({ state, questions, retain, timeoutMs, provider });
+  for (const a of Object.values(result.answers)) {
+    if (a.type === 'boolean') a.verdict = verdict(a.probability, t);
+  }
   console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
 }
 

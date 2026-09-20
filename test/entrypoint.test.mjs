@@ -61,6 +61,6 @@ test('importing as a module does not run the CLI or read stdin', async () => {
     child.stdin.end();
   });
   assert.equal(out.code, 0, out.stderr);
-  assert.deepEqual(JSON.parse(out.stdout), ['JevError', 'ask', 'choose', 'evaluate', 'listProviders', 'score']);
+  assert.deepEqual(JSON.parse(out.stdout), ['JevError', 'ask', 'choose', 'evaluate', 'listProviders', 'score', 'thresholds', 'verdict']);
   assert.equal(out.stderr, '');
 });

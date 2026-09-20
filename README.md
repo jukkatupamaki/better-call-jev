@@ -17,6 +17,8 @@ Set `JEV_API_KEY` in your environment. Never commit it. Options:
 - per project, gitignored: `.claude/settings.local.json` with `{ "env": { "JEV_API_KEY": "..." } }`
 - for the quick check below: a gitignored `.env` file (see `.env.example`)
 
+Decision thresholds: every boolean answer from the CLI carries a `verdict` (`yes`, `no`, `undecided`) computed from two cut-offs that default to 0.8 and 0.2. Move them for your own risk tolerance with `JEV_THRESHOLD_HIGH` and `JEV_THRESHOLD_LOW` in the same places as the key, or per call with `--thresholds 0.9,0.1`.
+
 Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
 
 ## Install

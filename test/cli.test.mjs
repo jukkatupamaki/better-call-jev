@@ -236,3 +236,28 @@ test('bearer token is sent', async () => {
   await runCli(['--state', 'x', '--bool', 'ok?'], { env });
   assert.equal(server.requests.at(-1).headers.authorization, 'Bearer k');
 });
+
+test('boolean answers carry a verdict under the default 0.8 / 0.2 thresholds', async () => {
+  const r = await runCli(['--state', 'x', '--bool', 'ok?'], { env });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).q1.verdict, 'yes'); // stub returns 0.9
+});
+
+test('--thresholds and env override the defaults', async () => {
+  const r = await runCli(['--state', 'x', '--bool', 'ok?', '--thresholds', '0.95,0.1'], { env });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).q1.verdict, 'undecided');
+  const r2 = await runCli(['--state', 'x', '--bool', 'ok?'], { env: { ...env, JEV_THRESHOLD_HIGH: '0.95' } });
+  assert.equal(r2.code, 0, r2.stderr);
+  assert.equal(JSON.parse(r2.stdout).q1.verdict, 'undecided');
+  const r3 = await runCli(['--state', 'x', '--bool', 'ok?', '--thresholds', '0.5,0.1'], { env: { ...env, JEV_THRESHOLD_HIGH: '0.95' } });
+  assert.equal(JSON.parse(r3.stdout).q1.verdict, 'yes'); // flag beats env
+});
+
+test('--thresholds validation', async () => {
+  for (const bad of ['0.8', 'abc,0.2', '0.2,0.8', '1.5,0.2']) {
+    const r = await runCli(['--state', 'x', '--bool', 'ok?', '--thresholds', bad], { env });
+    assert.equal(r.code, 1, bad);
+    assert.match(r.stderr, /[Tt]hreshold/);
+  }
+});

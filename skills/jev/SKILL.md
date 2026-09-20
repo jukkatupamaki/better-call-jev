@@ -19,7 +19,7 @@ Every use of Jev is the same three moves.
    - `choice`: one of a small named set. Describe each option; the descriptions are what Jev matches against. Add `other` when the input may fit none.
    - `score`: a position on an ordered rubric. Label every rung concretely, lowest first.
    If you cannot bound the answer, it is not yet a judgement. Enumerate the candidates first, then ask.
-3. **Act on the number.** Boolean above 0.8 or below 0.2 is decided. A choice with a clear leader is decided. Anything in between means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding.
+3. **Act on the number.** A boolean at or above 0.8 is a decided yes, at or below 0.2 a decided no. The CLI applies this for you: every boolean answer carries a `verdict` of `yes`, `no`, or `undecided`. A choice with a clear leader is decided. Anything undecided means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding. The 0.8 / 0.2 pair is a default; the user can move it with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW` or per call with `--thresholds`. Do not change it yourself unless the user asks.
 
 Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
 
@@ -118,6 +118,7 @@ Flags:
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
 - `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
 - `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
+- `--thresholds <high,low>` sets the decision thresholds for boolean answers (default `0.8,0.2`, or env `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`). The flag beats the env. Use it only when the user has asked for a different cut-off, for example a stricter gate on a destructive action.
 - `--provider <name>` selects the gateway (default `vercel`, or env `JEV_PROVIDER`). Only `vercel` exists today; an unknown name exits 1 with `bad_request` and lists the supported ones. Leave it unset unless the user asks for a specific gateway.
 - Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
 
@@ -125,16 +126,18 @@ Answer shapes:
 
 | Type | Give | Get |
 |---|---|---|
-| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1 |
+| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1, and from the CLI `verdict`: `yes` / `no` / `undecided` |
 | `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities`, `confidence` |
 | `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
 
 As a module from Node code:
 
 ```js
-import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
+import { evaluate, ask, choose, score, verdict, thresholds, JevError } from './scripts/jev.mjs';
 await ask(state, instructions, criteria?);                // number
 await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
 await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
 await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answers, usage, requestId }
+verdict(probability, thresholds?);                         // 'yes' | 'no' | 'undecided' under the defaults or env
+thresholds({ high?, low? });                               // resolved { high, low }, validated
 ```

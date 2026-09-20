@@ -25,6 +25,8 @@ Set `JEV_API_KEY` in your environment. Never commit it. Options:
 - per project, gitignored: `.claude/settings.local.json` with `{ "env": { "JEV_API_KEY": "..." } }`
 - for the quick check below: a gitignored `.env` file (see `.env.example`)
 
+Decision thresholds: every boolean answer from the CLI carries a `verdict` (`yes`, `no`, `undecided`) computed from two cut-offs that default to 0.8 and 0.2. Move them for your own risk tolerance with `JEV_THRESHOLD_HIGH` and `JEV_THRESHOLD_LOW` in the same places as the key, or per call with `--thresholds 0.9,0.1`.
+
 Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
 
 ## Install
@@ -100,12 +102,11 @@ Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketpl
 
 ## Website
 
-The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it. `site/CNAME` holds the custom domain. One-time setup: in the repo's Settings, Pages, set Source to "GitHub Actions" and enter the domain under Custom domain; at Cloudflare, add DNS-only (grey cloud) records for the apex pointing at GitHub Pages' A/AAAA addresses and a `www` CNAME to `jukkatupamaki.github.io`, then tick "Enforce HTTPS" once the certificate is issued. The `.ai` domain should redirect to `.com` via a Cloudflare redirect rule.
+The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it.
 
 ---
 
 ## SKILL.md
-
 
 # Jev: a judgement primitive
 
@@ -123,7 +124,7 @@ Every use of Jev is the same three moves.
    - `choice`: one of a small named set. Describe each option; the descriptions are what Jev matches against. Add `other` when the input may fit none.
    - `score`: a position on an ordered rubric. Label every rung concretely, lowest first.
    If you cannot bound the answer, it is not yet a judgement. Enumerate the candidates first, then ask.
-3. **Act on the number.** Boolean above 0.8 or below 0.2 is decided. A choice with a clear leader is decided. Anything in between means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding.
+3. **Act on the number.** A boolean at or above 0.8 is a decided yes, at or below 0.2 a decided no. The CLI applies this for you: every boolean answer carries a `verdict` of `yes`, `no`, or `undecided`. A choice with a clear leader is decided. Anything undecided means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding. The 0.8 / 0.2 pair is a default; the user can move it with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW` or per call with `--thresholds`. Do not change it yourself unless the user asks.
 
 Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
 
@@ -222,6 +223,7 @@ Flags:
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
 - `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
 - `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
+- `--thresholds <high,low>` sets the decision thresholds for boolean answers (default `0.8,0.2`, or env `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`). The flag beats the env. Use it only when the user has asked for a different cut-off, for example a stricter gate on a destructive action.
 - `--provider <name>` selects the gateway (default `vercel`, or env `JEV_PROVIDER`). Only `vercel` exists today; an unknown name exits 1 with `bad_request` and lists the supported ones. Leave it unset unless the user asks for a specific gateway.
 - Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
 
@@ -229,18 +231,20 @@ Answer shapes:
 
 | Type | Give | Get |
 |---|---|---|
-| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1 |
+| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1, and from the CLI `verdict`: `yes` / `no` / `undecided` |
 | `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities`, `confidence` |
 | `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
 
 As a module from Node code:
 
 ```js
-import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
+import { evaluate, ask, choose, score, verdict, thresholds, JevError } from './scripts/jev.mjs';
 await ask(state, instructions, criteria?);                // number
 await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
 await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
 await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answers, usage, requestId }
+verdict(probability, thresholds?);                         // 'yes' | 'no' | 'undecided' under the defaults or env
+thresholds({ high?, low? });                               // resolved { high, low }, validated
 ```
 
 ---
@@ -274,7 +278,7 @@ A decision is "mechanically determined" only when the evidence, a command's outp
 2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
 3. Batch every question you have about the same evidence into one call.
 4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
-5. Act on the answer. Boolean above 0.8 or below 0.2 is decided. Between, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
+5. Act on the answer. Every boolean answer carries a `verdict`: `yes`, `no`, or `undecided`, from thresholds that default to 0.8 / 0.2 and that the user can change with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`. Act on `yes` and `no`. On `undecided`, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
 
 ## What Jev cannot do
 

@@ -25,7 +25,7 @@ A decision is "mechanically determined" only when the evidence, a command's outp
 2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
 3. Batch every question you have about the same evidence into one call.
 4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
-5. Act on the answer. Boolean above 0.8 or below 0.2 is decided. Between, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
+5. Act on the answer. Every boolean answer carries a `verdict`: `yes`, `no`, or `undecided`, from thresholds that default to 0.8 / 0.2 and that the user can change with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`. Act on `yes` and `no`. On `undecided`, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
 
 ## What Jev cannot do
 
