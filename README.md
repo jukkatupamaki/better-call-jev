@@ -52,6 +52,20 @@ cp -r skills/jev /path/to/project/.claude/skills/jev
 env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --bool "Is the customer asking for a refund?"
 ```
 
+## Tests
+
+```bash
+node --test 'test/*.test.mjs'
+```
+
+No dependencies, no network, no key needed. The suite stubs `fetch` for transport and provider logic, runs a local HTTP server for timeout and CLI cases, and spawns the real script, including through a symlink, to cover entrypoint detection, argument parsing, stdin modes, output shape, and exit codes. The `test/` folder is not part of the shipped skill.
+
+The live conformance check is separate and needs a real key:
+
+```bash
+JEV_API_KEY=... node skills/jev/scripts/check-provider.mjs
+```
+
 ## Adding a gateway
 
 Only Vercel AI Gateway is implemented, but the script is built so another gateway is one table entry with no changes to the CLI, module API, output, or docs.
