@@ -52,6 +52,24 @@ cp -r skills/jev /path/to/project/.claude/skills/jev
 env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --bool "Is the customer asking for a refund?"
 ```
 
+## Adding a gateway
+
+Only Vercel AI Gateway is implemented, but the script is built so another gateway is one table entry with no changes to the CLI, module API, output, or docs.
+
+1. Add an entry to `PROVIDERS` in `skills/jev/scripts/jev.mjs`. The contract is documented in the comment above the table. In short: `label`, `keyHelp`, `keyEnvFallbacks`, `requiredEnv` (extra config such as an account id, each with a help string), `supportsNoRetain`, `endpoint(env)`, `buildRequest`, `parseResponse`, and optionally `extractError` for gateways that return errors with HTTP 200.
+2. Translate to and from the canonical shape inside the entry. Callers must always see `type: "boolean"` with `probability`, `choice` with `choice`, `probabilities`, `confidence`, and `score` with `score`, `probabilities` keyed by rung index, `confidence`. If the gateway calls booleans `noul` or wraps the body in `result`, undo that in `parseResponse`.
+3. Run the conformance check against a live key for that gateway:
+
+   ```bash
+   JEV_API_KEY=... node skills/jev/scripts/check-provider.mjs <name>
+   ```
+
+   It sends one request with all three question types and fails on any deviation from the canonical shape.
+
+4. Bump the plugin version. The provider list in `--help` and in error messages updates itself.
+
+Cloudflare Workers AI is the likely next entry. Its differences are known: `noul` naming, a `result` envelope, an account id in the URL, snake_case usage, no request id, no retention option.
+
 ## Releasing
 
 Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, commit, and tag. Version-pinned installs only update when the string changes.

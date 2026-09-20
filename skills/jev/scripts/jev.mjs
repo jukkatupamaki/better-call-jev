@@ -8,19 +8,42 @@
 
 // Transport --------------------------------------------------------------------
 //
-// Each provider entry owns everything gateway-specific: endpoint, auth, request
-// shape, response shape, and where the API key comes from. Adding a gateway
-// means adding an entry here; nothing caller-facing changes.
+// Each provider entry owns everything gateway-specific. The rest of the file
+// only ever sees the canonical shape:
+//
+//   { answers: { [key]: Answer }, usage: { inputTokens, outputTokens }, requestId }
+//
+// where Answer is one of
+//   { type: 'boolean', probability }
+//   { type: 'choice',  choice, probabilities, confidence }
+//   { type: 'score',   score, probabilities, confidence }
+//
+// Provider contract (see README "Adding a gateway"):
+//   label            Human name, used in error messages.
+//   keyHelp          Where to obtain the API key, used in the missing-key error.
+//   keyEnvFallbacks  Legacy env var names accepted for the key, after JEV_API_KEY.
+//   requiredEnv      Extra env vars this provider needs, e.g. an account id.
+//                    Each is { name, help }. Checked before any request.
+//   supportsNoRetain Whether `retain: false` can be honoured.
+//   endpoint(env)    Returns the URL. JEV_ENDPOINT overrides it.
+//   buildRequest({ state, questions, retain })  Canonical questions in, wire body out.
+//   parseResponse(data, res)  Wire body (parsed JSON) and the Response in;
+//                    canonical shape out, or null if the body is not a success.
+//   extractError(data, res)   Optional. Returns an upstream error message string
+//                    if the body is an error (even with HTTP 200), else null.
+//
+// scripts/check-provider.mjs verifies an entry against this contract live.
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.JEV_TIMEOUT_MS) || 8000;
 
 const PROVIDERS = {
   vercel: {
     label: 'Vercel AI Gateway',
-    endpoint: 'https://ai-gateway.vercel.sh/v1/evaluate',
     keyHelp: 'create an API key in the Vercel dashboard under AI Gateway and export it as JEV_API_KEY',
     keyEnvFallbacks: ['AI_GATEWAY_API_KEY', 'VERCEL_AI_GATEWAY_KEY'],
+    requiredEnv: [],
     supportsNoRetain: true,
+    endpoint: () => 'https://ai-gateway.vercel.sh/v1/evaluate',
     buildRequest({ state, questions, retain }) {
       const body = { model: 'typesafe-ai/jev', state, questions };
       if (retain === false) body.providerOptions = { gateway: { zeroDataRetention: true } };
@@ -37,18 +60,36 @@ const PROVIDERS = {
         requestId: data.providerMetadata?.gateway?.generationId ?? null,
       };
     },
+    extractError(data) {
+      return data?.error?.message || null;
+    },
   },
 };
 
 const DEFAULT_PROVIDER = 'vercel';
 
+export function listProviders() {
+  return Object.keys(PROVIDERS);
+}
+
 function resolveProvider(name) {
   const id = (name || process.env.JEV_PROVIDER || DEFAULT_PROVIDER).toLowerCase();
   const p = PROVIDERS[id];
   if (!p) {
-    throw new JevError('bad_request', `Unknown provider "${id}". Supported: ${Object.keys(PROVIDERS).join(', ')}.`);
+    throw new JevError('bad_request', `Unknown provider "${id}". Supported: ${listProviders().join(', ')}.`);
   }
-  return { id, ...p, endpoint: process.env.JEV_ENDPOINT || p.endpoint };
+  return { id, ...p };
+}
+
+function providerEnv(provider) {
+  const env = {};
+  for (const { name, help } of provider.requiredEnv) {
+    if (!process.env[name]) {
+      throw new JevError('auth', `Missing ${name}: ${help}`);
+    }
+    env[name] = process.env[name];
+  }
+  return env;
 }
 
 function apiKey(provider) {
@@ -74,11 +115,13 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
     throw new JevError('bad_request', `Provider "${provider.id}" does not support --no-retain.`);
   }
   const key = apiKey(provider);
-  const body = provider.buildRequest({ state, questions, retain });
+  const env = providerEnv(provider);
+  const url = process.env.JEV_ENDPOINT || provider.endpoint(env);
+  const body = provider.buildRequest({ state, questions, retain, env });
 
   let res;
   try {
-    res = await fetch(provider.endpoint, {
+    res = await fetch(url, {
       method: 'POST',
       signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -95,13 +138,14 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
   let data;
   try { data = JSON.parse(text); } catch { data = null; }
 
-  if (!res.ok) {
-    const upstream = data?.error?.message || data?.message || text;
-    const code = classify(res.status);
+  const upstreamError = provider.extractError?.(data, res) ?? null;
+  if (!res.ok || upstreamError) {
+    const upstream = upstreamError || data?.message || text;
+    const code = res.ok ? 'unknown' : classify(res.status);
     throw new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
   }
 
-  const result = provider.parseResponse(data);
+  const result = provider.parseResponse(data, res);
   if (!result) {
     throw new JevError('unknown', 'Jev returned an unexpected response.', { cause: data ?? text });
   }
@@ -191,7 +235,7 @@ Options:
   --verbose                 Print { answers, usage, requestId } instead of just answers
   --no-retain               Ask the service not to retain the input (best effort)
   --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
-  --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${Object.keys(PROVIDERS).join(', ')}
+  --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
 Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_ENDPOINT (optional)
