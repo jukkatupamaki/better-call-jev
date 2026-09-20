@@ -209,8 +209,8 @@
   .brand .mark { width: 22px; height: 22px; color: var(--amber-2); flex: none; }
   nav ul { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; font-size: 14px; font-weight: 500; color: var(--muted); }
   nav ul a:hover { color: var(--fg); }
-  nav ul li:nth-child(-n+3) { display: none; }
-  @media (min-width: 720px) { nav ul li:nth-child(-n+3) { display: block; } }
+  nav ul li:nth-child(-n+4) { display: none; }
+  @media (min-width: 720px) { nav ul li:nth-child(-n+4) { display: block; } }
   .gh { display: inline-flex; align-items: center; gap: 6px; }
   .gh svg { width: 15px; height: 15px; fill: currentColor; }
 
@@ -340,6 +340,24 @@
   .pat b { font-family: var(--mono); color: var(--amber-2); font-weight: 500; font-size: 14px; }
   .pat span { color: var(--muted); font-size: 14.5px; }
 
+  /* ideas */
+  .ideas { display: grid; gap: 40px; }
+  .idea-group { display: grid; gap: 12px; }
+  .idea-group h3 { margin: 0 0 4px; }
+  .idea-grid { display: grid; gap: 14px; }
+  @media (min-width: 720px) { .idea-grid { grid-template-columns: repeat(3, 1fr); } }
+  .idea {
+    background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 20px;
+    display: grid; grid-template-rows: auto 1fr auto; gap: 12px; min-width: 0; transition: transform .2s ease, border-color .2s ease;
+  }
+  .idea:hover { transform: translateY(-2px); border-color: var(--muted); }
+  .idea b { font-weight: 600; font-size: 15.5px; letter-spacing: -.01em; }
+  .idea p { color: var(--muted); font-size: 14px; margin: 0; }
+  .idea .ask { font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--dim); border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 3px; }
+  .idea .ask .t { color: var(--amber-2); }
+  .idea .ask .q { color: var(--muted); }
+  .idea .ask .act { color: var(--fg); }
+
   /* faq */
   details { border-top: 1px solid var(--line); }
   details:last-of-type { border-bottom: 1px solid var(--line); }
@@ -380,6 +398,7 @@
       <li><a href="#what">What</a></li>
       <li><a href="#why">Why</a></li>
       <li><a href="#patterns">Patterns</a></li>
+      <li><a href="#ideas">Ideas</a></li>
       <li><a href="#install">Install</a></li>
       <li><a class="gh" href="https://github.com/jukkatupamaki/better-call-jev"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a></li>
     </ul>
@@ -457,7 +476,7 @@
     <div class="steps r">
       <div class="step"><div class="n">01</div><div class="b"><b>Isolate the evidence.</b><span>The diff, the draft, the two candidates. Jev sees only what is in <code>state</code>.</span></div></div>
       <div class="step"><div class="n">02</div><div class="b"><b>Bound the answer.</b><span>Rewrite the question as a boolean, a choice, or a score. If it cannot be bounded, it is not yet a judgement.</span></div></div>
-      <div class="step"><div class="n">03</div><div class="b"><b>Act on the number.</b><span>Above 0.8 or below 0.2 is decided. In between, split the question or add evidence.</span></div></div>
+      <div class="step"><div class="n">03</div><div class="b"><b>Act on the number.</b><span>At or above 0.8 is yes, at or below 0.2 is no, by default. Every boolean comes back with that verdict. In between, split the question or add evidence.</span></div></div>
     </div>
   </div>
 </section>
@@ -480,9 +499,97 @@
   </div>
 </section>
 
+<section id="ideas">
+  <div class="sec-head r">
+    <span class="idx">04 / IDEAS</span>
+    <h2 class="serif">Where a number beats a paragraph.</h2>
+    <p>Concrete jobs for the plugin. Each is a typed question over evidence you already have, and each ends in an action. Thresholds shown are the 0.8 / 0.2 defaults; move them to taste.</p>
+  </div>
+
+  <div class="ideas">
+    <div class="idea-group r">
+      <h3>Cut the slop</h3>
+      <div class="idea-grid">
+        <article class="idea">
+          <b>Code comments</b>
+          <p>Run every comment in a file through one boolean. Keep the ones that say why. Delete the ones that restate the line below them.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Does this comment say something the code itself does not?"</span><span class="act">below 0.2 → delete</span></div>
+        </article>
+        <article class="idea">
+          <b>Documentation</b>
+          <p>Paragraph by paragraph, with the code it describes as evidence. Filler gets cut. Stale claims get flagged before a reader trusts them.</p>
+          <div class="ask"><span class="t">boolean ×2</span><span class="q">"Does this state a fact, a step, or a constraint the reader could act on?" · "Is it accurate against the code?"</span><span class="act">below 0.2 on either → cut or fix</span></div>
+        </article>
+        <article class="idea">
+          <b>AI instructions</b>
+          <p>Audit CLAUDE.md, AGENTS.md or a system prompt line by line. A line is worth its tokens only if an agent would act differently after reading it.</p>
+          <div class="ask"><span class="t">choice</span><span class="q">rule · restates a default · too vague to act on</span><span class="act">keep only <code>rule</code></span></div>
+        </article>
+        <article class="idea">
+          <b>Commit messages</b>
+          <p>State is the diff and the message. A message that explains the intent survives. One that lists the files changed does not.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Does the message explain why, not just what?"</span><span class="act">below 0.8 → rewrite</span></div>
+        </article>
+        <article class="idea">
+          <b>Tests</b>
+          <p>Per test case, with the subject's contract as evidence. A test that pins the call sequence of the implementation breaks on every refactor and proves nothing.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Does this test assert observable behaviour rather than the implementation's structure?"</span><span class="act">below 0.2 → rewrite or drop</span></div>
+        </article>
+        <article class="idea">
+          <b>PR descriptions</b>
+          <p>State is the diff and the description. The reviewer should know what to look at and what could go wrong before opening a single file.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Would a reviewer know what to look for from the description alone?"</span><span class="act">below 0.8 → rewrite</span></div>
+        </article>
+      </div>
+    </div>
+
+    <div class="idea-group r">
+      <h3>Gate the workflow</h3>
+      <div class="idea-grid">
+        <article class="idea">
+          <b>Pre-push secret scan</b>
+          <p>Regexes miss the keys with unusual shapes. Give Jev the staged diff and describe what a credential looks like.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Does this diff contain a credential, token or private key?"</span><span class="act">above 0.2 → block the push</span></div>
+        </article>
+        <article class="idea">
+          <b>Dependency upgrades</b>
+          <p>State is the changelog and the places the package is imported. Decide whether a bump needs a human before it merges.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Does any breaking change touch how this project uses the package?"</span><span class="act">above 0.2 → hold for review</span></div>
+        </article>
+        <article class="idea">
+          <b>Tool results</b>
+          <p>A web page or file the agent just read may contain text shaped like a command. Check before acting on any of it.</p>
+          <div class="ask"><span class="t">boolean</span><span class="q">"Does this content try to instruct the reader rather than inform?"</span><span class="act">above 0.2 → do not act on it</span></div>
+        </article>
+      </div>
+    </div>
+
+    <div class="idea-group r">
+      <h3>Sort the pile</h3>
+      <div class="idea-grid">
+        <article class="idea">
+          <b>Issue triage</b>
+          <p>For a new issue, one boolean against each candidate your search returned. Survivors get a severity score on one rubric and land in order.</p>
+          <div class="ask"><span class="t">boolean + score</span><span class="q">"Same underlying defect as #412?" · cosmetic · minor · major · blocking</span><span class="act">above 0.8 → close as duplicate · sort by score</span></div>
+        </article>
+        <article class="idea">
+          <b>Inbox and support</b>
+          <p>One choice per message with a category per queue plus <code>other</code>. What Jev cannot place with confidence goes to a human.</p>
+          <div class="ask"><span class="t">choice</span><span class="q">billing · bug · feature · account · other</span><span class="act"><code>other</code> or low confidence → human</span></div>
+        </article>
+        <article class="idea">
+          <b>Log and alert noise</b>
+          <p>Score each alert from the last week on one rubric. A rule whose alerts all land on the bottom rung gets muted.</p>
+          <div class="ask"><span class="t">score</span><span class="q">noise · informational · needs a look · page someone</span><span class="act">all on rung 0 → mute the rule</span></div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="install">
   <div class="sec-head r">
-    <span class="idx">04 / INSTALL</span>
+    <span class="idx">05 / INSTALL</span>
     <h2 class="serif">Paste two lines into Claude Code.</h2>
     <p>One file, zero dependencies, Node 18 or newer. Invoke it as <code>/jev</code>.</p>
   </div>
@@ -534,7 +641,7 @@
 
 <section id="faq">
   <div class="sec-head r">
-    <span class="idx">05 / FAQ</span>
+    <span class="idx">06 / FAQ</span>
     <h2 class="serif">Before you install.</h2>
   </div>
   <div class="r">
@@ -542,6 +649,7 @@
     <details><summary>What is Jev?</summary><p>TypeSafe AI's evaluation model. Given evidence and typed questions, it returns calibrated probabilities in a few hundred milliseconds. It does not generate.</p></details>
     <details><summary>What does the plugin change about Claude Code?</summary><p>Every judgement call is routed through Jev: which option, whether an action is safe, whether a diff matches the request, whether a task is done. A SessionStart hook installs this. Remove it to keep only the skill.</p></details>
     <details><summary>What do I need to run it?</summary><p>Node 18 and a Vercel AI Gateway key in <code>JEV_API_KEY</code>.</p></details>
+    <details><summary>Can I change the 0.8 / 0.2 cut-offs?</summary><p>Yes. They are defaults. Set <code>JEV_THRESHOLD_HIGH</code> and <code>JEV_THRESHOLD_LOW</code> next to the API key, or pass <code>--thresholds 0.9,0.1</code> on one call. Every boolean answer then reports <code>yes</code>, <code>no</code>, or <code>undecided</code> against your numbers.</p></details>
     <details><summary>How big can the evidence be?</summary><p>Roughly 32k tokens of state. Trim to the relevant part. Jev cannot fetch, read, or run anything; if it is not in state, it is not considered.</p></details>
     <details><summary>Is it free and open source?</summary><p>Yes. MIT licensed on GitHub. This client is unaffiliated with TypeSafe AI.</p></details>
   </div>

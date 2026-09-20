@@ -15,7 +15,7 @@ Install inside Claude Code: `/plugin marketplace add jukkatupamaki/better-call-j
 
 ## Docs
 
-- [Landing page](https://bettercalljev.com/): overview, patterns, install, FAQ
+- [Landing page](https://bettercalljev.com/): overview, patterns, ideas, install, FAQ
 - [Full text for LLMs](https://bettercalljev.com/llms-full.txt): the complete skill reference in one file
 - [Skill reference (SKILL.md)](https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md): method, decomposition patterns, per-domain recipes, CLI flags, module API
 - [README](https://github.com/jukkatupamaki/better-call-jev#readme): setup, install options, tests, adding a gateway
