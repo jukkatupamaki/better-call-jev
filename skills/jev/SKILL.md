@@ -75,7 +75,15 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 ## Calling it
 
-Requires Node 18+ and `JEV_API_KEY` in the environment. If the key only lives in a `.env` file, run `env $(cat .env) node ...` in one command. The key is a Vercel AI Gateway key created in the Vercel dashboard; that is the only place the provider matters. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
+Requires Node 18+ and `JEV_API_KEY` in the environment. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
+
+**If the key is missing** (the script exits with "Missing API key"), do not guess or skip silently. Tell the user, once, exactly this:
+
+1. Jev is served through Vercel AI Gateway, so the key is an AI Gateway API key. Create one in the Vercel dashboard: AI Gateway, then API keys. Any Vercel account works; usage is billed there.
+2. Put it in the environment as `JEV_API_KEY`. Options, pick one: `export JEV_API_KEY=...` in the shell profile; an `env` block in `~/.claude/settings.json` for every Claude Code session; or `.claude/settings.local.json` in the current project, which is gitignored. Never commit it.
+3. Restart the session or re-export so the new variable is visible, then retry.
+
+If the key only lives in a `.env` file, run `env $(cat .env) node ...` in one command. That is the only place the provider matters; nothing else in this skill depends on it.
 
 Prefer the stdin JSON form. It handles multi-line evidence, structured state, and criteria without quoting problems.
 

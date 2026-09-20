@@ -14,7 +14,12 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.JEV_TIMEOUT_MS) || 8000;
 
 function apiKey() {
   const key = process.env.JEV_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_KEY;
-  if (!key) throw new JevError('auth', 'Missing API key: set JEV_API_KEY.');
+  if (!key) {
+    throw new JevError(
+      'auth',
+      'Missing API key: set JEV_API_KEY. Jev is served through Vercel AI Gateway; create an API key in the Vercel dashboard under AI Gateway and export it as JEV_API_KEY.',
+    );
+  }
   return key;
 }
 
