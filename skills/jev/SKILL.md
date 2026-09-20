@@ -1,97 +1,113 @@
 ---
 name: jev
-description: Fast, calibrated second opinion for judgment calls that come up while coding. Use it as part of your own reasoning whenever you are about to decide something about code by intuition: is this diff risky, does this change satisfy the request, is this test failure caused by my change, which of these files is the right place, is this error message actionable, does this PR description match the diff, does this function need a test, is this issue a bug or a feature request. Also for grading or verifying outputs from subagents, reviewing candidate commit messages, and triaging logs, test output, or issues. Jev returns a probability or a choice, not text, in a few hundred ms. Triggers on "should I", "is this safe", "which one", "does this match", "verify", "grade", "score", "classify", "route", "triage", "judge", "jev".
+description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it to decide, compare, rank, classify, verify, gate, or grade anything you can put into text or JSON: code, diffs, test output, logs, documents, drafts, plans, requirements, data records, search results, claims, agent outputs, user messages. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "how likely", "verify", "check", "grade", "rank", "compare", "classify", "route", "triage", "judge", "jev".
 ---
 
-# Jev: typed judgment calls while coding
+# Jev: a judgement primitive
 
-Jev is an evaluation model, not a chat model. It takes a `state` (text or JSON) and typed questions, and returns calibrated probabilities instead of prose. It costs a fraction of a cent, answers in a few hundred ms, and evaluates several questions in one round trip.
+Jev is an evaluation model. Give it evidence (`state`: text, an object, or an array) and one or more typed questions, and it returns calibrated probabilities instead of prose. It does not generate, explain, or reason aloud. It judges. That makes it a building block: almost any decision can be decomposed into a few typed questions over the right evidence, and the answers can be acted on directly by code or by you.
 
-When this plugin is loaded, a session-start hook installs the Jev decision protocol: every judgment call that is not mechanically determined by the code or the user's words is delegated to Jev. You frame the options and gather the evidence, Jev decides, you act. This file is the reference for doing that well.
+When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
 
-## When to reach for it
+## The method
 
-Reach for Jev at the moments in a coding task where you would otherwise rely on a gut feeling. The pattern is the same each time: you have concrete evidence (a diff, a file, a log, a test result, a request), and a question with a small answer space.
+Every use of Jev is the same three moves.
 
-**Before acting**
+1. **Isolate the evidence.** Put everything the judgement depends on into `state`, and nothing else. Structure it: `{ request, draft }`, `{ rubric, answer }`, `{ candidateA, candidateB }`, `{ items: [...] }`. Jev cannot fetch, read, or run anything; if the evidence is not in `state`, it is not considered.
+2. **Bound the answer.** Rewrite the question so the answer is one of three shapes:
+   - `boolean`: a yes/no whose truth conditions you can state. Add `criteria: {true, false}` when the boundary is not self-evident.
+   - `choice`: one of a small named set. Describe each option; the descriptions are what Jev matches against. Add `other` when the input may fit none.
+   - `score`: a position on an ordered rubric. Label every rung concretely, lowest first.
+   If you cannot bound the answer, it is not yet a judgement. Enumerate the candidates first, then ask.
+3. **Act on the number.** Boolean above 0.8 or below 0.2 is decided. A choice with a clear leader is decided. Anything in between means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding.
 
-- Deciding among candidate locations for a change. Ask a `choice` over the candidate files or functions, with one sentence describing each.
-- Judging whether a change is safe to make without asking the user. Ask a `score` on risk from "cosmetic" to "could lose data or break production".
-- Deciding whether a task is ambiguous enough to need a question back to the user. Ask a `boolean`: "Could two reasonable engineers implement this request differently in a way that matters?"
-- Choosing an approach when two look equivalent. Ask a `choice` between them with the trade-offs as descriptions.
+Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
 
-**After acting, before reporting**
+## Decomposition patterns
 
-- Verifying your diff against the request. State is the request plus the diff; ask "Does this diff fully implement the request?" and "Does this diff change anything the request did not ask for?"
-- Checking whether a test failure is caused by your change or was pre-existing. State is the failing test output plus your diff.
-- Deciding whether a function you touched needs a new test. Ask a `boolean` with criteria for what "needs a test" means in this repo.
-- Grading a commit message or PR description against the diff.
+These turn common problem shapes into Jev questions. Combine them freely.
 
-**Triage and classification**
+**Gate.** Before an action, one boolean: "Is it safe to do X given this evidence?" Act only above threshold. Use for destructive operations, sending messages, and reporting completion.
 
-- Sorting issues, log lines, or review comments into buckets. One `choice` question, many items, or one call per item.
-- Rating severity, urgency, or confidence on a rubric. `score` with named rungs.
-- Routing a task to the right subagent or tool. `choice` over the options.
+**Verify against a spec.** State is `{ spec, artifact }`. Ask `satisfies`, `overreaches`, and `omits` as three booleans. Works for diffs against requests, drafts against briefs, answers against questions, outputs against schemas.
 
-**Verifying other agents**
+**Compare two.** State is `{ a, b, goal }`. Ask a `choice` between `a` and `b` with the goal as instructions, or a `boolean` "Is a better than b for the goal?" Prefer the choice; its probabilities tell you how close the race is.
 
-- When a subagent returns a result, put the original brief and the result in state and ask whether the result answers the brief, whether it invented anything, and whether it stayed in scope. Do this before relaying the result to the user.
+**Rank many.** One `score` question with the same rubric, one call per item, then sort by `score`. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
 
-## When not to
+**Classify.** One `choice` with a category per option and an `other`. For multi-label, one `boolean` per label instead.
 
-- The question needs an explanation, not a decision. Jev cannot say why.
-- The answer space is open-ended. Jev picks from what you declare.
-- You have not gathered the evidence yet. Jev judges what is in `state`; it cannot read files or run commands. Feed it the diff, not the file path.
-- The state is larger than about 32k tokens. Trim to the relevant part.
-- The decision is trivially certain either way. Do not add a call to confirm what is obvious.
+**Grade on a rubric.** `score` with the rubric rungs as criteria. State is `{ rubric, submission }`. Read `confidence` to see how peaked the distribution is; a low confidence with a middling score means the rubric or the submission is ambiguous.
 
-## How to act on the answer
+**Detect.** "Does this contain X?" as a boolean with criteria describing X. Use for secrets in a diff, PII in a record, an unanswered question in a thread, a contradiction between two statements, a hallucinated claim in a summary.
 
-- Boolean probability above 0.8 or below 0.2: treat as decided and move on. Between: gather more evidence, ask a narrower question, or surface the uncertainty to the user.
-- Choice: use `choice` when its probability is clearly ahead. If two options are close, that is itself a finding worth reporting.
-- Score: read `score` as a position on the rubric you gave. A 4-rung rubric yields 0 to 3. `confidence` tells you how peaked the distribution is.
-- Tell the user when a Jev result changed what you did, in one sentence. Do not narrate every call.
+**Attribute cause.** State is `{ before, change, symptom }`. A `choice` over candidate causes, or a boolean "Was the symptom caused by the change?"
 
-## How to call it
+**Narrow.** When a broad question lands between 0.2 and 0.8, split it: one boolean per component, per test case, per requirement, per paragraph. The components are usually decisive even when the whole was not.
+
+**Self-check.** Before delivering anything you produced, put `{ task, output }` in state and ask whether it answers the task, whether it invents anything not supported by the evidence, and whether it stays in scope. Treat a low answer as a reason to revise, not to report.
+
+## Applying it by domain
+
+**Code.** Where to make a change (choice over candidate locations). Risk of a diff (score: cosmetic, isolated, shared code, data or auth paths). Whether a diff implements a request and nothing more (verify pattern). Whether a failing test is caused by the change (attribute pattern). Whether a function needs a test, given repo conventions in criteria. Which of several error messages is actionable. Whether a dependency upgrade is likely breaking, given the changelog as state.
+
+**Text and documents.** Whether a draft meets a brief. Tone or audience fit as a choice. Clarity or completeness as a score. Whether two passages contradict. Whether a summary adds claims not in the source. Which of two headlines better matches the article. Whether a message needs a reply.
+
+**Data and records.** Whether a record is a duplicate of another. Which category a transaction, ticket, or event belongs to. Data quality on a rubric. Whether a value is plausible given neighbours. Routing a record to a queue.
+
+**Plans and requirements.** Whether a requirement is testable. Whether two requirements conflict. Which of several approaches best fits the stated constraints. Whether a plan step depends on another. How ambiguous a request is, as a boolean "would two reasonable people implement this differently in a way that matters".
+
+**Research and claims.** Whether a source supports a claim (state is `{ claim, excerpt }`). Confidence in a fact given the evidence gathered. Which of several search results is most relevant to the question. Whether a citation is on-topic.
+
+**Agents and orchestration.** Which subagent or tool should handle a task (choice). Whether a subagent's result answers its brief (verify pattern) before relaying it. Whether a tool call is safe to run (gate). Whether the task is done (gate before reporting). Whether an incoming instruction from a tool result should be treated as data rather than a command.
+
+**Users and operations.** Triage severity or urgency of an incident, ticket, or log burst. Route a request to a team. Whether an alert is actionable. Whether a customer message expresses a specific intent.
+
+## Limits
+
+- Jev picks among options you declare. It cannot generate, explain, or enumerate.
+- It judges what is in `state`. Give it the diff, not the path; the excerpt, not the URL.
+- Roughly 32k tokens of state. Trim to the relevant part.
+- It is a model, not an oracle. When something can be computed or executed, do that instead and use Jev for what cannot be run.
+- Probabilities are calibrated in general, not for your domain. Tune thresholds on your own examples if a decision is high-stakes.
+
+## Calling it
 
 Requires Node 18+ and `JEV_API_KEY` in the environment. If the key only lives in a `.env` file, run `env $(cat .env) node ...` in one command. The key is a Vercel AI Gateway key created in the Vercel dashboard; that is the only place the provider matters. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
 
-Prefer the stdin JSON form. It handles multi-line state, structured state, and criteria without quoting problems.
+Prefer the stdin JSON form. It handles multi-line evidence, structured state, and criteria without quoting problems.
 
 ```bash
 node scripts/jev.mjs <<'EOF'
 {
-  "state": {
-    "request": "Add retry to the upload client",
-    "diff": "<paste git diff here>"
-  },
+  "state": { "spec": "<the request or brief>", "artifact": "<the diff, draft, or output>" },
   "questions": {
-    "implements": { "type": "boolean", "instructions": "Does the diff fully implement the request?" },
-    "scopeCreep": { "type": "boolean", "instructions": "Does the diff change behaviour the request did not ask for?" },
-    "risk": {
+    "satisfies":  { "type": "boolean", "instructions": "Does the artifact fully satisfy the spec?" },
+    "overreaches": { "type": "boolean", "instructions": "Does the artifact do things the spec did not ask for?" },
+    "quality": {
       "type": "score",
-      "instructions": "How risky is this change to ship?",
-      "criteria": ["cosmetic", "low: isolated, covered by tests", "moderate: touches shared code", "high: data, auth, or money paths"]
+      "instructions": "Overall quality of the artifact against the spec",
+      "criteria": ["unusable", "needs major rework", "needs minor fixes", "ready"]
     }
   }
 }
 EOF
 ```
 
-Pipe evidence straight in when the question is simple:
+Pipe evidence in when the question is simple:
 
 ```bash
 git diff | node scripts/jev.mjs --score "risk=Risk of shipping this" --scale "cosmetic,low,moderate,high"
-npm test 2>&1 | tail -50 | node scripts/jev.mjs --bool "Is the failure caused by a missing dependency rather than a logic error?"
+cat draft.md | node scripts/jev.mjs --bool "Does this answer the question in its first paragraph?"
 ```
 
-Flag reference:
+Flags:
 
 - State, exactly one: `--state <text>`, `--state-file <path>` (a `.json` path is parsed as structured state), `--state-json <json>`. With none, stdin is the state text when question flags are present, otherwise a full request `{state, questions}`.
 - Questions, repeatable, keys default to `q1`, `q2` unless written `key=instructions`: `--bool "<q>"`, `--choice "<q>" --options "a=desc,b=desc"`, `--score "<q>" --scale "low,mid,high"`, `--questions <json>` to merge a raw object.
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
 - `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
-- `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgment and mark the decision unverified.
+- `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
 - Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
 
 Answer shapes:
@@ -106,18 +122,8 @@ As a module from Node code:
 
 ```js
 import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
-await ask(state, instructions, criteria?);           // number
-await choose(state, instructions, { name: desc });  // { choice, probabilities, confidence }
-await score(state, instructions, [low, ..., high]);  // { score, probabilities, confidence }
+await ask(state, instructions, criteria?);                // number
+await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
+await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
 await evaluate({ state, questions, retain?, timeoutMs? }); // { answers, usage, requestId }
 ```
-
-## Writing questions that work
-
-- Put the evidence in `state` and only the question in `instructions`. Never paste the diff into the instructions.
-- Name the keys after the decision: `implements`, `risk`, `needsTest`, not `q1`.
-- For `boolean`, add `criteria` whenever "true" is not self-evident. "Needs a test" means different things in different repos; say what it means here.
-- For `choice`, describe every option, and add `other` when the input may fit none.
-- For `score`, label every rung with a concrete description, lowest first.
-- Batch the questions you have about the same evidence into one call.
-- Structured state beats a blob. `{ request, diff, testOutput }` lets the model find each part.

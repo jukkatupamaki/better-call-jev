@@ -1,8 +1,17 @@
 {
   "name": "jev",
-  "description": "Typed yes/no, choice and rubric-score evaluation of text or JSON via TypeSafe AI's Jev model. Zero-dependency Node script.",
+  "description": "Low-level judgement primitive for Claude Code: calibrated yes/no, choice, and rubric-score answers over any text or JSON, applied to code, documents, data, plans, claims, and agent outputs.",
   "version": "0.1.0",
-  "author": { "name": "Jukka Tupamäki", "email": "jukka@lemanse.fi" },
+  "author": {
+    "name": "Jukka Tupamäki",
+    "email": "jukka@lemanse.fi"
+  },
   "license": "MIT",
-  "keywords": ["evaluation", "llm-as-judge", "classification", "routing", "jev"]
+  "keywords": [
+    "evaluation",
+    "llm-as-judge",
+    "classification",
+    "routing",
+    "jev"
+  ]
 }

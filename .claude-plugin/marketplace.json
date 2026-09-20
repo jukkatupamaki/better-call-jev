@@ -1,12 +1,15 @@
 {
   "name": "jev",
-  "description": "Jev evaluation skill for Claude Code: typed yes/no, choice and score questions over any text or JSON.",
-  "owner": { "name": "Jukka Tupamäki", "email": "jukka@lemanse.fi" },
+  "description": "Low-level judgement primitive for Claude Code: calibrated yes/no, choice, and rubric-score answers over any text or JSON, applied to code, documents, data, plans, claims, and agent outputs.",
+  "owner": {
+    "name": "Jukka Tupamäki",
+    "email": "jukka@lemanse.fi"
+  },
   "plugins": [
     {
       "name": "jev",
       "source": "./",
-      "description": "Jev evaluation skill: typed yes/no, choice and score questions over any text or JSON.",
+      "description": "Low-level judgement primitive for Claude Code: calibrated yes/no, choice, and rubric-score answers over any text or JSON, applied to code, documents, data, plans, claims, and agent outputs.",
       "version": "0.1.0"
     }
   ]

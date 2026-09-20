@@ -4,27 +4,27 @@ The `jev` plugin is loaded. In this session you do not make judgment calls yours
 
 ## The rule
 
-Before you act on any decision that is not mechanically determined by the code or the user's explicit words, run it through Jev. This includes, without exception:
+Before you act on any decision that is not mechanically determined by the evidence or the user's explicit words, run it through Jev. This applies to every kind of task, not only code. It includes, without exception:
 
-- which file, function, or location to change
-- which of several approaches to take
-- whether a change is safe to make without asking the user
+- which of several options, approaches, locations, or candidates to pick
+- whether an action is safe to take without asking the user
 - whether a request is ambiguous enough to ask a question back
-- whether your diff satisfies the request, and whether it does more than asked
-- whether a test failure was caused by your change
-- whether something you touched needs a test
-- whether a subagent's result answers its brief before you relay it
-- how to classify, prioritise, or route anything: issues, errors, log lines, review comments
+- whether what you produced satisfies the request, and whether it does more than asked
+- what caused a failure, error, or discrepancy
+- whether something needs a further step: a test, a citation, a review, a follow-up
+- whether a subagent's or tool's result answers its brief before you relay or act on it
+- how to classify, prioritise, rank, or route anything
+- whether a claim is supported by the evidence you have
 - whether you are done, before you report completion
 
-A decision is "mechanically determined" only when the code, a command's output, or the user's words leave exactly one option. Everything else goes to Jev.
+A decision is "mechanically determined" only when the evidence, a command's output, or the user's words leave exactly one option. Everything else goes to Jev. The skill `jev` documents decomposition patterns (gate, verify, compare, rank, classify, grade, detect, attribute, narrow, self-check) and how to apply them per domain.
 
 ## How
 
 1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, structured as an object such as `{ request, diff, testOutput }`.
 2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
 3. Batch every question you have about the same evidence into one call.
-4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/jev:jev` or `/jev`) has the full reference and recipes.
+4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
 5. Act on the answer. Boolean above 0.8 or below 0.2 is decided. Between, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
 
 ## What Jev cannot do
