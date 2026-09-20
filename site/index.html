@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Better Call Jev · calibrated judgement for Claude Code</title>
-<meta name="description" content="Better Call Jev is a zero-dependency Claude Code plugin that turns any bounded question into a calibrated probability, a choice, or a rubric score using TypeSafe AI's Jev evaluation model. Gate, verify, compare, rank, classify and detect with numbers instead of prose.">
+<meta name="description" content="Calibrated probabilities instead of prose. Better Call Jev is a zero-dependency Claude Code plugin that turns any bounded question into a probability, a choice, or a rubric score using TypeSafe AI's Jev evaluation model.">
 <link rel="canonical" href="https://bettercalljev.com/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="theme-color" content="#0a0d0d" media="(prefers-color-scheme: dark)">
@@ -85,12 +85,12 @@
         {
           "@type": "Question",
           "name": "What is Better Call Jev?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Better Call Jev is a Claude Code plugin and zero-dependency Node client for Jev, the evaluation model from TypeSafe AI. You give it evidence and a bounded question and it returns a calibrated probability, a choice among named options, or a score on a rubric, instead of prose." }
+          "acceptedAnswer": { "@type": "Answer", "text": "A Claude Code plugin that returns calibrated probabilities instead of prose. Zero dependencies. The model is Jev, by TypeSafe AI." }
         },
         {
           "@type": "Question",
           "name": "What is Jev?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Jev is an evaluation model built by TypeSafe AI. It does not generate or explain. It judges: given a state object and typed questions, it returns calibrated probabilities in a few hundred milliseconds." }
+          "acceptedAnswer": { "@type": "Answer", "text": "TypeSafe AI's evaluation model. Given evidence and typed questions, it returns calibrated probabilities in a few hundred milliseconds. It does not generate." }
         },
         {
           "@type": "Question",
@@ -105,7 +105,7 @@
         {
           "@type": "Question",
           "name": "What does the plugin change about how Claude Code behaves?",
-          "acceptedAnswer": { "@type": "Answer", "text": "A SessionStart hook installs a protocol so that every judgement call not mechanically determined by the evidence is routed through Jev: which option to pick, whether an action is safe, whether a diff does what was asked and nothing more, whether a task is actually done." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Every judgement call is routed through Jev: which option, whether an action is safe, whether a diff matches the request, whether a task is done. A SessionStart hook installs this. Remove it to keep only the skill." }
         },
         {
           "@type": "Question",
@@ -392,7 +392,7 @@
   <div>
     <span class="eyebrow"><i></i>Claude Code plugin · v0.1.0</span>
     <h1 class="serif">Better Call <em>Jev.</em></h1>
-    <p class="lede">A judgement primitive for agents. Give Jev the evidence and a bounded question. Get back <b>a calibrated probability</b>, not a paragraph.</p>
+    <p class="lede"><b>A calibrated probability</b> instead of a paragraph. Give Jev the evidence and a bounded question. Act on the number.</p>
     <div class="cta">
       <a class="btn primary" href="#install">Install <kbd>↵</kbd></a>
       <a class="btn" href="https://github.com/jukkatupamaki/better-call-jev">Source on GitHub</a>
@@ -411,7 +411,7 @@
   <div class="sec-head r">
     <span class="idx">01 / WHAT IT DOES</span>
     <h2 class="serif">Three shapes of answer. Nothing else.</h2>
-    <p>Jev is <a href="https://typesafe.ai">TypeSafe AI's</a> evaluation model. It does not generate or explain. It judges. Put everything the decision depends on into <code>state</code>, ask typed questions, and act on the numbers.</p>
+    <p>Jev judges. It does not generate or explain. Put everything the decision depends on into <code>state</code>, ask typed questions, act on the numbers. Jev is <a href="https://typesafe.ai">TypeSafe AI's</a> evaluation model.</p>
   </div>
 
   <div class="bento">
@@ -427,7 +427,7 @@
 
     <article class="tile r">
       <div class="type"><b>choice</b><span>→ distribution</span></div>
-      <p>One of a small named set you describe. Returns the pick, the full distribution, and confidence.</p>
+      <p>The pick from a small named set you describe, with the full distribution and confidence.</p>
       <div class="viz" data-viz="choice">
         <div class="row win"><span class="l">billing</span><div class="track"><div class="fill" data-w="71"></div></div><span class="v">0.71</span></div>
         <div class="row"><span class="l">infra</span><div class="track"><div class="fill" data-w="22"></div></div><span class="v">0.22</span></div>
@@ -438,7 +438,7 @@
 
     <article class="tile r">
       <div class="type"><b>score</b><span>→ rung</span></div>
-      <p>A position on a rubric you label rung by rung. Returns the rung and how peaked the distribution is.</p>
+      <p>The rung on a rubric you label rung by rung, with how peaked the distribution is.</p>
       <div class="viz" data-viz="score">
         <div class="rungs">
           <div class="rung">cosmetic</div><div class="rung warm">low</div><div class="rung lit">moderate</div><div class="rung">high</div>
@@ -455,7 +455,7 @@
     <h2 class="serif">Claude stops deciding by intuition.</h2>
   </div>
   <div class="why-grid">
-    <p class="r">A session hook installs a protocol. <b>Every judgement call that is not mechanically determined by the evidence goes through Jev.</b> Which option to pick. Whether an action is safe. Whether the diff does what was asked and nothing more. Whether the task is actually done. The agent gets a number, and a number has a threshold.</p>
+    <p class="r"><b>Every judgement call goes through Jev.</b> A session hook installs the protocol: anything not mechanically determined by the evidence is asked as a typed question. Which option. Whether an action is safe. Whether the diff does what was asked and nothing more. Whether the task is done. A number has a threshold. Intuition does not.</p>
     <div class="steps r">
       <div class="step"><div class="n">01</div><div class="b"><b>Isolate the evidence.</b><span>The diff, the draft, the two candidates. Jev sees only what is in <code>state</code>.</span></div></div>
       <div class="step"><div class="n">02</div><div class="b"><b>Bound the answer.</b><span>Rewrite the question as a boolean, a choice, or a score. If it cannot be bounded, it is not yet a judgement.</span></div></div>
@@ -468,17 +468,17 @@
   <div class="sec-head r">
     <span class="idx">03 / PATTERNS</span>
     <h2 class="serif">Most decisions are three questions.</h2>
-    <p>Decomposition shapes that turn a vague problem into typed questions over the right evidence. Combine freely.</p>
+    <p>Eight shapes that turn a vague problem into typed questions. Combine freely.</p>
   </div>
   <div class="patterns r">
-    <div class="pat"><b>gate</b><span>One boolean before a risky action. Act only above threshold.</span></div>
-    <div class="pat"><b>verify</b><span><code>satisfies</code>, <code>overreaches</code>, <code>omits</code> over a spec and an artifact.</span></div>
-    <div class="pat"><b>compare</b><span>A choice between <code>a</code> and <code>b</code>. The probabilities tell you how close the race is.</span></div>
-    <div class="pat"><b>rank</b><span>One score with the same rubric per item, then sort.</span></div>
+    <div class="pat"><b>gate</b><span>Act only above threshold. One boolean before a risky action.</span></div>
+    <div class="pat"><b>verify</b><span>Three booleans over a spec and an artifact: <code>satisfies</code>, <code>overreaches</code>, <code>omits</code>.</span></div>
+    <div class="pat"><b>compare</b><span>A choice between <code>a</code> and <code>b</code>. The gap between the two probabilities is how close the race is.</span></div>
+    <div class="pat"><b>rank</b><span>Sort by score. One rubric, one score per item.</span></div>
     <div class="pat"><b>classify</b><span>A choice with one option per category, plus <code>other</code>.</span></div>
-    <div class="pat"><b>detect</b><span>Secrets in a diff, PII in a record, an unsupported claim in a summary.</span></div>
-    <div class="pat"><b>narrow</b><span>A broad question lands between 0.2 and 0.8. Split it per component; the parts are usually decisive.</span></div>
-    <div class="pat"><b>self-check</b><span>Before delivering, ask whether the output answers the task and stays in scope.</span></div>
+    <div class="pat"><b>detect</b><span>A boolean with the target described: secrets in a diff, PII in a record, an unsupported claim in a summary.</span></div>
+    <div class="pat"><b>narrow</b><span>Split it. A question between 0.2 and 0.8 becomes one boolean per component, and the parts are usually decisive.</span></div>
+    <div class="pat"><b>self-check</b><span>Ask whether the output answers the task and stays in scope, before delivering it.</span></div>
   </div>
 </section>
 
@@ -486,7 +486,7 @@
   <div class="sec-head r">
     <span class="idx">04 / INSTALL</span>
     <h2 class="serif">Two lines. No npm install.</h2>
-    <p>Node 18 or newer. One file, zero dependencies. The skill is invoked as <code>/jev</code>.</p>
+    <p>One file, zero dependencies, Node 18 or newer. Invoke it as <code>/jev</code>.</p>
   </div>
 
   <div class="install-grid">
@@ -497,7 +497,7 @@
         <pre><span class="p">/plugin</span> marketplace add jukkatupamaki/better-call-jev
 <span class="p">/plugin</span> install better-call-jev@better-call-jev</pre>
       </div>
-      <p class="note">Then set <code>JEV_API_KEY</code>. Requests are served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Put it in your shell profile or in the project's gitignored <code>.claude/settings.local.json</code>. Never commit it.</p>
+      <p class="note">Set <code>JEV_API_KEY</code> to a Vercel AI Gateway key. Keep it in your shell profile or the project's gitignored <code>.claude/settings.local.json</code>. Never commit it.</p>
 
       <h3>Or from Node</h3>
       <div class="code">
@@ -529,7 +529,7 @@
 }
 <span class="s">EOF</span></pre>
       </div>
-      <p class="note">The full reference, per-domain recipes and CLI flags live in <a href="https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md">the skill file</a>. Machine-readable summary at <a href="/llms.txt">/llms.txt</a>.</p>
+      <p class="note">Full reference, per-domain recipes and CLI flags: <a href="https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md">the skill file</a>. For machines: <a href="/llms.txt">/llms.txt</a>.</p>
     </div>
   </div>
 </section>
@@ -540,10 +540,10 @@
     <h2 class="serif">Short answers.</h2>
   </div>
   <div class="r">
-    <details><summary>What is Better Call Jev?</summary><p>A Claude Code plugin and zero-dependency Node client for Jev, the evaluation model from TypeSafe AI. You give it evidence and a bounded question and it returns a calibrated probability, a choice among named options, or a score on a rubric, instead of prose.</p></details>
-    <details><summary>What is Jev?</summary><p>An evaluation model built by TypeSafe AI. It does not generate or explain. It judges: given a state object and typed questions, it returns calibrated probabilities in a few hundred milliseconds.</p></details>
-    <details><summary>What does the plugin change about Claude Code?</summary><p>A SessionStart hook installs a protocol so every judgement call not mechanically determined by the evidence is routed through Jev: which option to pick, whether an action is safe, whether a diff does what was asked and nothing more, whether a task is actually done. Remove the hook if you only want the skill.</p></details>
-    <details><summary>What do I need to run it?</summary><p>Node 18 or newer and a Vercel AI Gateway key in <code>JEV_API_KEY</code>. There is nothing to npm install. The transport can change without affecting callers.</p></details>
+    <details><summary>What is Better Call Jev?</summary><p>A Claude Code plugin that returns calibrated probabilities instead of prose. Zero dependencies. The model is Jev, by TypeSafe AI.</p></details>
+    <details><summary>What is Jev?</summary><p>TypeSafe AI's evaluation model. Given evidence and typed questions, it returns calibrated probabilities in a few hundred milliseconds. It does not generate.</p></details>
+    <details><summary>What does the plugin change about Claude Code?</summary><p>Every judgement call is routed through Jev: which option, whether an action is safe, whether a diff matches the request, whether a task is done. A SessionStart hook installs this. Remove it to keep only the skill.</p></details>
+    <details><summary>What do I need to run it?</summary><p>Node 18 and a Vercel AI Gateway key in <code>JEV_API_KEY</code>.</p></details>
     <details><summary>How big can the evidence be?</summary><p>Roughly 32k tokens of state. Trim to the relevant part. Jev cannot fetch, read, or run anything; if it is not in state, it is not considered.</p></details>
     <details><summary>Is it free and open source?</summary><p>Yes. MIT licensed on GitHub. This client is unaffiliated with TypeSafe AI.</p></details>
   </div>
@@ -554,8 +554,8 @@
 <footer>
   <div class="wrap foot-grid">
     <div>
-      <p>MIT licensed. Built by <a href="https://github.com/jukkatupamaki">Jukka Tupamäki</a>. Jev is a product of <a href="https://typesafe.ai">TypeSafe AI</a>; this client is unaffiliated.</p>
-      <p>This site's domain was chosen by Jev. This site's design direction was chosen by Jev.</p>
+      <p>Built by <a href="https://github.com/jukkatupamaki">Jukka Tupamäki</a>. MIT. Jev is made by <a href="https://typesafe.ai">TypeSafe AI</a>; this client is unaffiliated.</p>
+      <p>Jev chose this site's domain, design, typeface and colour.</p>
     </div>
     <div class="verdict r" aria-label="Jev's choice of domain">
       <div class="row win"><span>.com</span><div class="track"><div class="fill" data-w="82"></div></div><span class="v">0.82</span></div>
