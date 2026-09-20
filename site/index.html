@@ -7,8 +7,8 @@
 <meta name="description" content="Better Call Jev is a zero-dependency Claude Code plugin that turns any bounded question into a calibrated probability, a choice, or a rubric score using TypeSafe AI's Jev evaluation model. Gate, verify, compare, rank, classify and detect with numbers instead of prose.">
 <link rel="canonical" href="https://bettercalljev.com/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
-<meta name="theme-color" content="#0c0b09" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f7f3ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3f6f6" media="(prefers-color-scheme: light)">
 <meta name="author" content="Jukka Tupamäki">
 <meta name="keywords" content="Claude Code plugin, LLM as judge, evaluation model, calibrated probability, Jev, TypeSafe AI, agent judgement, classification, verification, gating">
 
@@ -120,46 +120,46 @@
 
 <style>
   :root {
-    --bg: #0c0b09;
-    --bg-2: #12110e;
-    --fg: #ece5d3;
-    --muted: #9b9382;
-    --dim: #5d574b;
-    --line: #26231d;
-    --line-2: #34302a;
-    --amber: #f5b400;
-    --amber-2: #ffcf3d;
-    --amber-ink: #0c0b09;
-    --amber-soft: rgba(245, 180, 0, .12);
+    --bg: #0a0d0d;
+    --bg-2: #101415;
+    --fg: #e6ebea;
+    --muted: #8f9a99;
+    --dim: #55605f;
+    --line: #1d2425;
+    --line-2: #293233;
+    --amber: #0f8b8d;
+    --amber-2: #22a7a9;
+    --amber-ink: #f2fbfb;
+    --amber-soft: rgba(34, 167, 169, .14);
     --green: #8fd694;
-    --dot: rgba(236, 229, 211, .07);
-    --shadow: 0 30px 80px -30px rgba(0,0,0,.8);
+    --dot: rgba(230, 235, 234, .07);
+    --shadow: 0 30px 80px -30px rgba(0,0,0,.85);
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --bg: #f7f3ea;
-      --bg-2: #fffdf8;
-      --fg: #1a1815;
-      --muted: #6b655a;
-      --dim: #a29a8a;
-      --line: #e3dccb;
-      --line-2: #d2cab7;
-      --amber: #c28f00;
-      --amber-2: #a67a00;
-      --amber-ink: #fffdf8;
-      --amber-soft: rgba(194, 143, 0, .12);
+      --bg: #f3f6f6;
+      --bg-2: #ffffff;
+      --fg: #141a1a;
+      --muted: #5f6b6a;
+      --dim: #97a3a2;
+      --line: #dde4e4;
+      --line-2: #c9d3d3;
+      --amber: #0b7577;
+      --amber-2: #095f61;
+      --amber-ink: #ffffff;
+      --amber-soft: rgba(11, 117, 119, .12);
       --green: #2f8f3a;
-      --dot: rgba(26, 24, 21, .09);
-      --shadow: 0 30px 80px -40px rgba(60, 45, 0, .35);
+      --dot: rgba(20, 26, 26, .09);
+      --shadow: 0 30px 80px -40px rgba(0, 40, 40, .3);
       color-scheme: light;
     }
   }
   :root[data-theme="light"] {
-    --bg: #f7f3ea; --bg-2: #fffdf8; --fg: #1a1815; --muted: #6b655a; --dim: #a29a8a;
-    --line: #e3dccb; --line-2: #d2cab7; --amber: #c28f00; --amber-2: #a67a00; --amber-ink: #fffdf8;
-    --amber-soft: rgba(194, 143, 0, .12); --green: #2f8f3a; --dot: rgba(26, 24, 21, .09);
-    --shadow: 0 30px 80px -40px rgba(60, 45, 0, .35); color-scheme: light;
+    --bg: #f3f6f6; --bg-2: #ffffff; --fg: #141a1a; --muted: #5f6b6a; --dim: #97a3a2;
+    --line: #dde4e4; --line-2: #c9d3d3; --amber: #0b7577; --amber-2: #095f61; --amber-ink: #ffffff;
+    --amber-soft: rgba(11, 117, 119, .12); --green: #2f8f3a; --dot: rgba(20, 26, 26, .09);
+    --shadow: 0 30px 80px -40px rgba(0, 40, 40, .3); color-scheme: light;
   }
 
   * { box-sizing: border-box; }
@@ -246,7 +246,7 @@
   }
   .term::after {
     content: ""; position: absolute; inset: -1px; border-radius: 12px; pointer-events: none;
-    background: linear-gradient(135deg, var(--amber-soft), transparent 40%); mix-blend-mode: screen; opacity: .8;
+    background: linear-gradient(135deg, var(--amber-soft), transparent 40%); opacity: .9;
   }
   .term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 12px; }
   .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
