@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Better Call Jev</title>
+<meta name="description" content="A judgement primitive for Claude Code. Turn any bounded question into a calibrated probability, a choice, or a rubric score. Zero dependencies, installs as a plugin.">
+<link rel="canonical" href="https://bettercalljev.com/">
+<meta property="og:title" content="Better Call Jev">
+<meta property="og:description" content="A judgement primitive for Claude Code. Calibrated probabilities instead of prose.">
+<meta property="og:url" content="https://bettercalljev.com/">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5b400'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' font-weight='bold' text-anchor='middle' fill='%23151515'%3EJ%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fbf8f1;
+    --fg: #1b1a17;
+    --muted: #625d52;
+    --accent: #b8860b;
+    --accent-ink: #1b1a17;
+    --card: #ffffff;
+    --line: #e6dfcf;
+    --code-bg: #1f1d19;
+    --code-fg: #f3ecd8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151412;
+      --fg: #f1ebdc;
+      --muted: #a79f8d;
+      --accent: #f5b400;
+      --accent-ink: #151412;
+      --card: #1e1c18;
+      --line: #2f2c25;
+      --code-bg: #0f0e0c;
+      --code-fg: #ece4cf;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151412; --fg: #f1ebdc; --muted: #a79f8d; --accent: #f5b400; --accent-ink: #151412;
+    --card: #1e1c18; --line: #2f2c25; --code-bg: #0f0e0c; --code-fg: #ece4cf;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 72px 0 40px; }
+  .eyebrow {
+    display: inline-block; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent-ink); background: var(--accent); padding: 4px 10px; border-radius: 4px; font-weight: 600;
+  }
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(40px, 8vw, 72px); line-height: 1.05; margin: 20px 0 16px; letter-spacing: -.01em;
+  }
+  .lede { font-size: 21px; color: var(--muted); max-width: 640px; margin: 0 0 28px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-block; padding: 12px 20px; border-radius: 8px; font-weight: 600; text-decoration: none;
+    border: 1px solid var(--line);
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.ghost { color: var(--fg); }
+  section { padding: 36px 0; border-top: 1px solid var(--line); }
+  h2 { font-family: Georgia, serif; font-size: 30px; margin: 0 0 12px; }
+  h3 { font-size: 18px; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; }
+  pre {
+    background: var(--code-bg); color: var(--code-fg); padding: 16px 18px; border-radius: 10px;
+    overflow-x: auto; font-size: 14px; line-height: 1.5; margin: 12px 0 18px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  p code, li code { background: var(--card); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .card strong { display: block; margin-bottom: 6px; font-size: 18px; }
+  .card p { color: var(--muted); margin: 0; font-size: 16px; }
+  .flow { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; }
+  .step { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: start; }
+  .num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+    font-weight: 700; display: grid; place-items: center; margin-top: 2px;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 12px 0 18px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  footer { padding: 36px 0 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+  .quiet { color: var(--muted); font-size: 15px; }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <span class="eyebrow">Claude Code plugin</span>
+  <h1>Better Call Jev.</h1>
+  <p class="lede">A judgement primitive for agents. Give Jev the evidence and a bounded question. Get back a calibrated probability, not a paragraph.</p>
+  <div class="cta">
+    <a class="btn primary" href="#install">Install</a>
+    <a class="btn ghost" href="https://github.com/jukkatupamaki/better-call-jev">View on GitHub</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="what">
+  <h2>What it does</h2>
+  <p>Jev is <a href="https://typesafe.ai">TypeSafe AI's</a> evaluation model. It does not generate or explain. It judges. Put everything the decision depends on into <code>state</code>, ask one or more typed questions, and act on the numbers.</p>
+  <pre><code>$ echo "Card charged twice" | node jev.mjs --bool "Is the customer asking for a refund?"
+{ "q1": { "type": "boolean", "probability": 0.31 } }</code></pre>
+  <div class="grid">
+    <div class="card"><strong>boolean</strong><p>A yes/no with stated truth conditions. Returns a probability from 0 to 1.</p></div>
+    <div class="card"><strong>choice</strong><p>One of a small named set you describe. Returns the pick, the full distribution, and confidence.</p></div>
+    <div class="card"><strong>score</strong><p>A position on a rubric you label rung by rung. Returns the rung and how peaked the distribution is.</p></div>
+  </div>
+</section>
+
+<section id="why">
+  <h2>Why a plugin</h2>
+  <p>With the plugin loaded, Claude Code stops deciding by intuition. A session hook installs a protocol: every judgement call that is not mechanically determined by the evidence goes through Jev. Which option to pick. Whether an action is safe. Whether the diff does what was asked and nothing more. Whether the task is actually done.</p>
+  <div class="flow">
+    <div class="step"><div class="num">1</div><div><strong>Isolate the evidence.</strong> The diff, the draft, the two candidates. Jev sees only what is in <code>state</code>.</div></div>
+    <div class="step"><div class="num">2</div><div><strong>Bound the answer.</strong> Rewrite the question as a boolean, a choice, or a score. If it cannot be bounded, it is not yet a judgement.</div></div>
+    <div class="step"><div class="num">3</div><div><strong>Act on the number.</strong> Above 0.8 or below 0.2 is decided. In between, split the question or add evidence.</div></div>
+  </div>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <p>Inside Claude Code:</p>
+  <pre><code>/plugin marketplace add jukkatupamaki/better-call-jev
+/plugin install better-call-jev@better-call-jev</code></pre>
+  <p>Then set <code>JEV_API_KEY</code>. Requests are served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Put it in your shell profile or in the project's gitignored <code>.claude/settings.local.json</code>. Never commit it.</p>
+  <p class="quiet">Node 18 or newer. No npm install, no dependencies. The skill is invoked as <code>/jev</code>.</p>
+
+  <h3>Or call it directly</h3>
+  <pre><code>node skills/jev/scripts/jev.mjs &lt;&lt;'EOF'
+{
+  "state": { "spec": "&lt;the request&gt;", "artifact": "&lt;the diff&gt;" },
+  "questions": {
+    "satisfies":   { "type": "boolean", "instructions": "Does the artifact fully satisfy the spec?" },
+    "overreaches": { "type": "boolean", "instructions": "Does it do things the spec did not ask for?" },
+    "quality": {
+      "type": "score",
+      "instructions": "Overall quality against the spec",
+      "criteria": ["unusable", "needs major rework", "needs minor fixes", "ready"]
+    }
+  }
+}
+EOF</code></pre>
+  <p>Or from Node:</p>
+  <pre><code>import { ask, choose, score } from './scripts/jev.mjs';
+
+await ask(state, "Is it safe to run this command?");            // 0.93
+await choose(state, "Which team?", { billing: "...", infra: "..." });
+await score(state, "Severity", ["cosmetic", "low", "moderate", "high"]);</code></pre>
+</section>
+
+<section id="patterns">
+  <h2>Patterns</h2>
+  <table>
+    <tr><th>Shape</th><th>Ask</th></tr>
+    <tr><td>Gate</td><td>One boolean before a risky action. Act only above threshold.</td></tr>
+    <tr><td>Verify</td><td><code>satisfies</code>, <code>overreaches</code>, <code>omits</code> over a spec and an artifact.</td></tr>
+    <tr><td>Compare</td><td>A choice between <code>a</code> and <code>b</code>. The probabilities tell you how close the race is.</td></tr>
+    <tr><td>Rank</td><td>One score with the same rubric per item, then sort.</td></tr>
+    <tr><td>Classify</td><td>A choice with one option per category, plus <code>other</code>.</td></tr>
+    <tr><td>Detect</td><td>Secrets in a diff, PII in a record, an unsupported claim in a summary.</td></tr>
+    <tr><td>Self-check</td><td>Before delivering, ask whether the output answers the task and stays in scope.</td></tr>
+  </table>
+  <p class="quiet">The full reference, per-domain recipes, and the CLI flags live in the skill file in the repo.</p>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <p>MIT licensed. Built by <a href="https://github.com/jukkatupamaki">Jukka Tupamäki</a>. Jev is a product of <a href="https://typesafe.ai">TypeSafe AI</a>; this client is unaffiliated.</p>
+  <p>This site's domain was chosen by Jev. It preferred .com over .ai at 0.82.</p>
+</footer>
+
+</body>
+</html>
