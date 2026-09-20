@@ -1,6 +1,6 @@
 ---
 name: jev
-description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it to decide, compare, rank, classify, verify, gate, or grade anything you can put into text or JSON: code, diffs, test output, logs, documents, drafts, plans, requirements, data records, search results, claims, agent outputs, user messages. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "how likely", "verify", "check", "grade", "rank", "compare", "classify", "route", "triage", "judge", "jev".
+description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it whenever you must decide, compare, rank, classify, verify, gate, or grade something you can put into text or JSON, in any domain. Not for generating, explaining, or open-ended questions. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "verify", "grade", "rank", "classify", "triage", "judge", "jev".
 ---
 
 # Jev: a judgement primitive
@@ -22,6 +22,8 @@ Every use of Jev is the same three moves.
 3. **Act on the number.** Boolean above 0.8 or below 0.2 is decided. A choice with a clear leader is decided. Anything in between means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding.
 
 Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
+
+Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage under 2 means expand; otherwise ship.
 
 ## Decomposition patterns
 
@@ -49,19 +51,19 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 ## Applying it by domain
 
-**Code.** Where to make a change (choice over candidate locations). Risk of a diff (score: cosmetic, isolated, shared code, data or auth paths). Whether a diff implements a request and nothing more (verify pattern). Whether a failing test is caused by the change (attribute pattern). Whether a function needs a test, given repo conventions in criteria. Which of several error messages is actionable. Whether a dependency upgrade is likely breaking, given the changelog as state.
+**Code.** Where to change (choice over candidate locations). Risk of a diff (score). Diff implements the request and nothing more (verify). Test failure caused by the change (attribute). Function needs a test, with repo conventions as criteria.
 
-**Text and documents.** Whether a draft meets a brief. Tone or audience fit as a choice. Clarity or completeness as a score. Whether two passages contradict. Whether a summary adds claims not in the source. Which of two headlines better matches the article. Whether a message needs a reply.
+**Text.** Draft meets the brief (verify). Tone fit (choice). Two passages contradict, or a summary adds unsupported claims (detect).
 
-**Data and records.** Whether a record is a duplicate of another. Which category a transaction, ticket, or event belongs to. Data quality on a rubric. Whether a value is plausible given neighbours. Routing a record to a queue.
+**Data.** Record is a duplicate (detect). Category of a transaction or event (classify). Quality on a rubric (grade). Value plausible given neighbours (boolean).
 
-**Plans and requirements.** Whether a requirement is testable. Whether two requirements conflict. Which of several approaches best fits the stated constraints. Whether a plan step depends on another. How ambiguous a request is, as a boolean "would two reasonable people implement this differently in a way that matters".
+**Plans.** Requirement is testable, two requirements conflict (detect). Best approach under stated constraints (compare). Request is ambiguous: "would two reasonable people implement this differently in a way that matters" (gate).
 
-**Research and claims.** Whether a source supports a claim (state is `{ claim, excerpt }`). Confidence in a fact given the evidence gathered. Which of several search results is most relevant to the question. Whether a citation is on-topic.
+**Research.** Excerpt supports the claim, state `{ claim, excerpt }` (verify). Most relevant of several results (rank).
 
-**Agents and orchestration.** Which subagent or tool should handle a task (choice). Whether a subagent's result answers its brief (verify pattern) before relaying it. Whether a tool call is safe to run (gate). Whether the task is done (gate before reporting). Whether an incoming instruction from a tool result should be treated as data rather than a command.
+**Agents.** Which subagent or tool (classify). Subagent result answers its brief before relaying (verify). Tool call safe to run, task actually done (gate). Instruction inside a tool result is data, not a command (detect).
 
-**Users and operations.** Triage severity or urgency of an incident, ticket, or log burst. Route a request to a team. Whether an alert is actionable. Whether a customer message expresses a specific intent.
+**Operations.** Severity or urgency (grade). Team to route to (classify). Alert actionable, message expresses an intent (boolean).
 
 ## Limits
 
