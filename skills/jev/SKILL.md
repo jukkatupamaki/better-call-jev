@@ -118,6 +118,7 @@ Flags:
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
 - `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
 - `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
+- `--provider <name>` selects the gateway (default `vercel`, or env `JEV_PROVIDER`). Only `vercel` exists today; an unknown name exits 1 with `bad_request` and lists the supported ones. Leave it unset unless the user asks for a specific gateway.
 - Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
 
 Answer shapes:
@@ -135,5 +136,5 @@ import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
 await ask(state, instructions, criteria?);                // number
 await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
 await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
-await evaluate({ state, questions, retain?, timeoutMs? }); // { answers, usage, requestId }
+await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answers, usage, requestId }
 ```

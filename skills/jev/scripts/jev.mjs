@@ -7,20 +7,57 @@
 // confined to the "Transport" section below. Nothing caller-facing names it.
 
 // Transport --------------------------------------------------------------------
+//
+// Each provider entry owns everything gateway-specific: endpoint, auth, request
+// shape, response shape, and where the API key comes from. Adding a gateway
+// means adding an entry here; nothing caller-facing changes.
 
-const ENDPOINT = process.env.JEV_ENDPOINT || 'https://ai-gateway.vercel.sh/v1/evaluate';
-const MODEL_SLUG = 'typesafe-ai/jev';
 const DEFAULT_TIMEOUT_MS = Number(process.env.JEV_TIMEOUT_MS) || 8000;
 
-function apiKey() {
-  const key = process.env.JEV_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_AI_GATEWAY_KEY;
-  if (!key) {
-    throw new JevError(
-      'auth',
-      'Missing API key: set JEV_API_KEY. Jev is served through Vercel AI Gateway; create an API key in the Vercel dashboard under AI Gateway and export it as JEV_API_KEY.',
-    );
+const PROVIDERS = {
+  vercel: {
+    label: 'Vercel AI Gateway',
+    endpoint: 'https://ai-gateway.vercel.sh/v1/evaluate',
+    keyHelp: 'create an API key in the Vercel dashboard under AI Gateway and export it as JEV_API_KEY',
+    keyEnvFallbacks: ['AI_GATEWAY_API_KEY', 'VERCEL_AI_GATEWAY_KEY'],
+    supportsNoRetain: true,
+    buildRequest({ state, questions, retain }) {
+      const body = { model: 'typesafe-ai/jev', state, questions };
+      if (retain === false) body.providerOptions = { gateway: { zeroDataRetention: true } };
+      return body;
+    },
+    parseResponse(data) {
+      if (!data?.answers) return null;
+      return {
+        answers: data.answers,
+        usage: {
+          inputTokens: data.usage?.inputTokens ?? null,
+          outputTokens: data.usage?.outputTokens ?? null,
+        },
+        requestId: data.providerMetadata?.gateway?.generationId ?? null,
+      };
+    },
+  },
+};
+
+const DEFAULT_PROVIDER = 'vercel';
+
+function resolveProvider(name) {
+  const id = (name || process.env.JEV_PROVIDER || DEFAULT_PROVIDER).toLowerCase();
+  const p = PROVIDERS[id];
+  if (!p) {
+    throw new JevError('bad_request', `Unknown provider "${id}". Supported: ${Object.keys(PROVIDERS).join(', ')}.`);
   }
-  return key;
+  return { id, ...p, endpoint: process.env.JEV_ENDPOINT || p.endpoint };
+}
+
+function apiKey(provider) {
+  const names = ['JEV_API_KEY', ...provider.keyEnvFallbacks];
+  for (const n of names) if (process.env[n]) return process.env[n];
+  throw new JevError(
+    'auth',
+    `Missing API key: set JEV_API_KEY. Jev is served through ${provider.label}; ${provider.keyHelp}.`,
+  );
 }
 
 function classify(status) {
@@ -31,14 +68,17 @@ function classify(status) {
   return 'unknown';
 }
 
-async function transport({ state, questions, retain, timeoutMs }) {
-  const body = { model: MODEL_SLUG, state, questions };
-  if (retain === false) body.providerOptions = { gateway: { zeroDataRetention: true } };
+async function transport({ state, questions, retain, timeoutMs, provider: providerName }) {
+  const provider = resolveProvider(providerName);
+  if (retain === false && !provider.supportsNoRetain) {
+    throw new JevError('bad_request', `Provider "${provider.id}" does not support --no-retain.`);
+  }
+  const key = apiKey(provider);
+  const body = provider.buildRequest({ state, questions, retain });
 
-  const key = apiKey();
   let res;
   try {
-    res = await fetch(ENDPOINT, {
+    res = await fetch(provider.endpoint, {
       method: 'POST',
       signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -60,18 +100,12 @@ async function transport({ state, questions, retain, timeoutMs }) {
     const code = classify(res.status);
     throw new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
   }
-  if (!data?.answers) {
+
+  const result = provider.parseResponse(data);
+  if (!result) {
     throw new JevError('unknown', 'Jev returned an unexpected response.', { cause: data ?? text });
   }
-
-  return {
-    answers: data.answers,
-    usage: {
-      inputTokens: data.usage?.inputTokens ?? null,
-      outputTokens: data.usage?.outputTokens ?? null,
-    },
-    requestId: data.providerMetadata?.gateway?.generationId ?? null,
-  };
+  return result;
 }
 
 // Public API ---------------------------------------------------------------------
@@ -94,6 +128,7 @@ export class JevError extends Error {
  * @param {Record<string, Question>} opts.questions Keyed questions. Types: boolean | choice | score.
  * @param {boolean} [opts.retain=true]              false asks the service not to retain the input (best effort).
  * @param {number}  [opts.timeoutMs=8000]           Abort and throw JevError('timeout') after this many ms. Env JEV_TIMEOUT_MS sets the default.
+ * @param {string}  [opts.provider='vercel']        Gateway to use. Env JEV_PROVIDER sets the default. Currently only 'vercel'.
  * @returns {Promise<{ answers: Record<string, Answer>, usage: { inputTokens: number|null, outputTokens: number|null }, requestId: string|null }>}
  * @throws {JevError}
  *
@@ -104,12 +139,12 @@ export class JevError extends Error {
  *         | { type: 'choice',  choice: string, probabilities: Record<string, number>, confidence: number }
  *         | { type: 'score',   score: number,  probabilities: Record<string, number>, confidence: number }} Answer
  */
-export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS, provider }) {
   if (state === undefined) throw new JevError('bad_request', '`state` is required.');
   if (!questions || Object.keys(questions).length === 0) {
     throw new JevError('bad_request', 'At least one question is required.');
   }
-  return transport({ state, questions, retain, timeoutMs });
+  return transport({ state, questions, retain, timeoutMs, provider });
 }
 
 /** Boolean question → probability of true (0..1). `criteria` is optional { true, false }. */
@@ -156,9 +191,10 @@ Options:
   --verbose                 Print { answers, usage, requestId } instead of just answers
   --no-retain               Ask the service not to retain the input (best effort)
   --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
+  --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${Object.keys(PROVIDERS).join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_TIMEOUT_MS (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_ENDPOINT (optional)
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 
@@ -205,6 +241,7 @@ async function main(argv) {
 
   const verbose = has('--verbose');
   const retain = !has('--no-retain');
+  const provider = next('--provider');
   const timeoutArg = next('--timeout');
   const timeoutMs = timeoutArg !== undefined ? Number(timeoutArg) : DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('--timeout must be a positive number of milliseconds');
@@ -260,7 +297,7 @@ async function main(argv) {
 
   if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}\n\n${USAGE}`);
 
-  const result = await evaluate({ state, questions, retain, timeoutMs });
+  const result = await evaluate({ state, questions, retain, timeoutMs, provider });
   console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
 }
 
