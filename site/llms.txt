@@ -1,0 +1,31 @@
+# Better Call Jev
+
+> A zero-dependency Claude Code plugin and Node client for Jev, TypeSafe AI's evaluation model. Give it evidence and a bounded question; get back a calibrated probability, a choice among named options, or a score on a rubric, instead of prose.
+
+Better Call Jev (package name `better-call-jev`, v0.1.0, MIT) is a judgement primitive for agents. It does not generate or explain. It judges. Put everything a decision depends on into `state`, ask one or more typed questions, and act on the numbers. With the plugin installed, a SessionStart hook routes every judgement call in Claude Code through Jev: which option to pick, whether an action is safe, whether a diff does what was asked and nothing more, whether a task is actually done.
+
+Three answer shapes:
+- `boolean`: a yes/no with stated truth conditions. Returns `probability` from 0 to 1.
+- `choice`: one of a small named set you describe. Returns `choice`, `probabilities` and `confidence`.
+- `score`: a position on a rubric labelled rung by rung. Returns `score` (rung index), `probabilities` and `confidence`.
+
+Thresholds: a boolean above 0.8 or below 0.2 is decided. In between, split the question or add evidence.
+
+Install inside Claude Code: `/plugin marketplace add jukkatupamaki/better-call-jev` then `/plugin install better-call-jev@better-call-jev`. Set `JEV_API_KEY` (a Vercel AI Gateway key). Node 18+. Nothing to npm install. The skill is invoked as `/jev`.
+
+## Docs
+
+- [Landing page](https://bettercalljev.com/): overview, patterns, install, FAQ
+- [Full text for LLMs](https://bettercalljev.com/llms-full.txt): the complete skill reference in one file
+- [Skill reference (SKILL.md)](https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md): method, decomposition patterns, per-domain recipes, CLI flags, module API
+- [README](https://github.com/jukkatupamaki/better-call-jev#readme): setup, install options, tests, adding a gateway
+
+## Source
+
+- [GitHub repository](https://github.com/jukkatupamaki/better-call-jev)
+- [Client script jev.mjs](https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/scripts/jev.mjs): CLI and ES module in one file
+- [Session protocol](https://github.com/jukkatupamaki/better-call-jev/blob/main/hooks/protocol.md): the rule the hook installs
+
+## Related
+
+- [TypeSafe AI](https://typesafe.ai): maker of the Jev model. This client is unaffiliated.

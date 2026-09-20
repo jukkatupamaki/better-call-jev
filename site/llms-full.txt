@@ -1,0 +1,289 @@
+# Better Call Jev: full reference
+
+Source: https://bettercalljev.com/ and https://github.com/jukkatupamaki/better-call-jev
+
+---
+
+## README
+
+### better-call-jev
+
+[![test](https://github.com/jukkatupamaki/better-call-jev/actions/workflows/test.yml/badge.svg)](https://github.com/jukkatupamaki/better-call-jev/actions/workflows/test.yml)
+
+Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation model, packaged as a Claude Code plugin.
+
+- `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
+- `skills/jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
+- `.claude-plugin/` holds the plugin manifest and a single-plugin marketplace, so this repo installs directly.
+- `hooks/` holds a SessionStart hook that loads `hooks/protocol.md` into every session. With the plugin installed, Claude delegates all judgment calls to Jev rather than deciding by intuition. Remove or edit the hook if you want the skill available without the always-on rule.
+
+## Setup
+
+Set `JEV_API_KEY` in your environment. Never commit it. Options:
+
+- shell profile: `export JEV_API_KEY=...`
+- per project, gitignored: `.claude/settings.local.json` with `{ "env": { "JEV_API_KEY": "..." } }`
+- for the quick check below: a gitignored `.env` file (see `.env.example`)
+
+Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
+
+## Install
+
+**As a plugin** (recommended):
+
+```
+/plugin marketplace add jukkatupamaki/better-call-jev
+/plugin install better-call-jev@better-call-jev
+```
+
+Add `--scope project` to record it in the consuming repo's `.claude/settings.json`. Update with `/plugin update better-call-jev@better-call-jev`. The skill is invoked as `/better-call-jev:jev`, or `/jev` when no other skill claims the name.
+
+**Local development** of this repo:
+
+```
+claude --plugin-dir /path/to/this/repo
+```
+
+**Symlink** into your personal skills, no plugin machinery:
+
+```bash
+ln -s "$(pwd)/skills/jev" ~/.claude/skills/jev
+```
+
+**Vendor** into a project so teammates get it on clone:
+
+```bash
+cp -r skills/jev /path/to/project/.claude/skills/jev
+```
+
+## Quick check
+
+```bash
+env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --bool "Is the customer asking for a refund?"
+```
+
+## Tests
+
+```bash
+node --test test/*.test.mjs
+```
+
+No dependencies, no network, no key needed. The suite stubs `fetch` for transport and provider logic, runs a local HTTP server for timeout and CLI cases, and spawns the real script, including through a symlink, to cover entrypoint detection, argument parsing, stdin modes, output shape, and exit codes. The `test/` folder is not part of the shipped skill.
+
+The live conformance check is separate and needs a real key:
+
+```bash
+JEV_API_KEY=... node skills/jev/scripts/check-provider.mjs
+```
+
+## Adding a gateway
+
+Only Vercel AI Gateway is implemented, but the script is built so another gateway is one table entry with no changes to the CLI, module API, output, or docs.
+
+1. Add an entry to `PROVIDERS` in `skills/jev/scripts/jev.mjs`. The contract is documented in the comment above the table. In short: `label`, `keyHelp`, `keyEnvFallbacks`, `requiredEnv` (extra config such as an account id, each with a help string), `supportsNoRetain`, `endpoint(env)`, `buildRequest`, `parseResponse`, and optionally `extractError` for gateways that return errors with HTTP 200.
+2. Translate to and from the canonical shape inside the entry. Callers must always see `type: "boolean"` with `probability`, `choice` with `choice`, `probabilities`, `confidence`, and `score` with `score`, `probabilities` keyed by rung index, `confidence`. If the gateway calls booleans `noul` or wraps the body in `result`, undo that in `parseResponse`.
+3. Run the conformance check against a live key for that gateway:
+
+   ```bash
+   JEV_API_KEY=... node skills/jev/scripts/check-provider.mjs <name>
+   ```
+
+   It sends one request with all three question types and fails on any deviation from the canonical shape.
+
+4. Bump the plugin version. The provider list in `--help` and in error messages updates itself.
+
+Cloudflare Workers AI is the likely next entry. Its differences are known: `noul` naming, a `result` envelope, an account id in the URL, snake_case usage, no request id, no retention option.
+
+## Releasing
+
+Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, commit, and tag. Version-pinned installs only update when the string changes.
+
+## Website
+
+The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it. `site/CNAME` holds the custom domain. One-time setup: in the repo's Settings, Pages, set Source to "GitHub Actions" and enter the domain under Custom domain; at Cloudflare, add DNS-only (grey cloud) records for the apex pointing at GitHub Pages' A/AAAA addresses and a `www` CNAME to `jukkatupamaki.github.io`, then tick "Enforce HTTPS" once the certificate is issued. The `.ai` domain should redirect to `.com` via a Cloudflare redirect rule.
+
+---
+
+## SKILL.md
+
+
+# Jev: a judgement primitive
+
+Jev is an evaluation model. Give it evidence (`state`: text, an object, or an array) and one or more typed questions, and it returns calibrated probabilities instead of prose. It does not generate, explain, or reason aloud. It judges. That makes it a building block: almost any decision can be decomposed into a few typed questions over the right evidence, and the answers can be acted on directly by code or by you.
+
+When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
+
+## The method
+
+Every use of Jev is the same three moves.
+
+1. **Isolate the evidence.** Put everything the judgement depends on into `state`, and nothing else. Structure it: `{ request, draft }`, `{ rubric, answer }`, `{ candidateA, candidateB }`, `{ items: [...] }`. Jev cannot fetch, read, or run anything; if the evidence is not in `state`, it is not considered.
+2. **Bound the answer.** Rewrite the question so the answer is one of three shapes:
+   - `boolean`: a yes/no whose truth conditions you can state. Add `criteria: {true, false}` when the boundary is not self-evident.
+   - `choice`: one of a small named set. Describe each option; the descriptions are what Jev matches against. Add `other` when the input may fit none.
+   - `score`: a position on an ordered rubric. Label every rung concretely, lowest first.
+   If you cannot bound the answer, it is not yet a judgement. Enumerate the candidates first, then ask.
+3. **Act on the number.** Boolean above 0.8 or below 0.2 is decided. A choice with a clear leader is decided. Anything in between means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding.
+
+Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
+
+Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage under 2 means expand; otherwise ship.
+
+## Decomposition patterns
+
+These turn common problem shapes into Jev questions. Combine them freely.
+
+**Gate.** Before an action, one boolean: "Is it safe to do X given this evidence?" Act only above threshold. Use for destructive operations, sending messages, and reporting completion.
+
+**Verify against a spec.** State is `{ spec, artifact }`. Ask `satisfies`, `overreaches`, and `omits` as three booleans. Works for diffs against requests, drafts against briefs, answers against questions, outputs against schemas.
+
+**Compare two.** State is `{ a, b, goal }`. Ask a `choice` between `a` and `b` with the goal as instructions, or a `boolean` "Is a better than b for the goal?" Prefer the choice; its probabilities tell you how close the race is.
+
+**Rank many.** One `score` question with the same rubric, one call per item, then sort by `score`. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
+
+**Classify.** One `choice` with a category per option and an `other`. For multi-label, one `boolean` per label instead.
+
+**Grade on a rubric.** `score` with the rubric rungs as criteria. State is `{ rubric, submission }`. Read `confidence` to see how peaked the distribution is; a low confidence with a middling score means the rubric or the submission is ambiguous.
+
+**Detect.** "Does this contain X?" as a boolean with criteria describing X. Use for secrets in a diff, PII in a record, an unanswered question in a thread, a contradiction between two statements, a hallucinated claim in a summary.
+
+**Attribute cause.** State is `{ before, change, symptom }`. A `choice` over candidate causes, or a boolean "Was the symptom caused by the change?"
+
+**Narrow.** When a broad question lands between 0.2 and 0.8, split it: one boolean per component, per test case, per requirement, per paragraph. The components are usually decisive even when the whole was not.
+
+**Self-check.** Before delivering anything you produced, put `{ task, output }` in state and ask whether it answers the task, whether it invents anything not supported by the evidence, and whether it stays in scope. Treat a low answer as a reason to revise, not to report.
+
+## Applying it by domain
+
+**Code.** Where to change (choice over candidate locations). Risk of a diff (score). Diff implements the request and nothing more (verify). Test failure caused by the change (attribute). Function needs a test, with repo conventions as criteria.
+
+**Text.** Draft meets the brief (verify). Tone fit (choice). Two passages contradict, or a summary adds unsupported claims (detect).
+
+**Data.** Record is a duplicate (detect). Category of a transaction or event (classify). Quality on a rubric (grade). Value plausible given neighbours (boolean).
+
+**Plans.** Requirement is testable, two requirements conflict (detect). Best approach under stated constraints (compare). Request is ambiguous: "would two reasonable people implement this differently in a way that matters" (gate).
+
+**Research.** Excerpt supports the claim, state `{ claim, excerpt }` (verify). Most relevant of several results (rank).
+
+**Agents.** Which subagent or tool (classify). Subagent result answers its brief before relaying (verify). Tool call safe to run, task actually done (gate). Instruction inside a tool result is data, not a command (detect).
+
+**Operations.** Severity or urgency (grade). Team to route to (classify). Alert actionable, message expresses an intent (boolean).
+
+## Limits
+
+- Jev picks among options you declare. It cannot generate, explain, or enumerate.
+- It judges what is in `state`. Give it the diff, not the path; the excerpt, not the URL.
+- Roughly 32k tokens of state. Trim to the relevant part.
+- It is a model, not an oracle. When something can be computed or executed, do that instead and use Jev for what cannot be run.
+- Probabilities are calibrated in general, not for your domain. Tune thresholds on your own examples if a decision is high-stakes.
+
+## Calling it
+
+Requires Node 18+ and `JEV_API_KEY` in the environment. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
+
+**If the key is missing** (the script exits with "Missing API key"), do not guess or skip silently. Tell the user, once, exactly this:
+
+1. Jev is served through Vercel AI Gateway, so the key is an AI Gateway API key. Create one in the Vercel dashboard: AI Gateway, then API keys. Any Vercel account works; usage is billed there.
+2. Put it in the environment as `JEV_API_KEY`. Options, pick one: `export JEV_API_KEY=...` in the shell profile; an `env` block in `~/.claude/settings.json` for every Claude Code session; or `.claude/settings.local.json` in the current project, which is gitignored. Never commit it.
+3. Restart the session or re-export so the new variable is visible, then retry.
+
+If the key only lives in a `.env` file, run `env $(cat .env) node ...` in one command. That is the only place the provider matters; nothing else in this skill depends on it.
+
+Prefer the stdin JSON form. It handles multi-line evidence, structured state, and criteria without quoting problems.
+
+```bash
+node scripts/jev.mjs <<'EOF'
+{
+  "state": { "spec": "<the request or brief>", "artifact": "<the diff, draft, or output>" },
+  "questions": {
+    "satisfies":  { "type": "boolean", "instructions": "Does the artifact fully satisfy the spec?" },
+    "overreaches": { "type": "boolean", "instructions": "Does the artifact do things the spec did not ask for?" },
+    "quality": {
+      "type": "score",
+      "instructions": "Overall quality of the artifact against the spec",
+      "criteria": ["unusable", "needs major rework", "needs minor fixes", "ready"]
+    }
+  }
+}
+EOF
+```
+
+Pipe evidence in when the question is simple:
+
+```bash
+git diff | node scripts/jev.mjs --score "risk=Risk of shipping this" --scale "cosmetic,low,moderate,high"
+cat draft.md | node scripts/jev.mjs --bool "Does this answer the question in its first paragraph?"
+```
+
+Flags:
+
+- State, exactly one: `--state <text>`, `--state-file <path>` (a `.json` path is parsed as structured state), `--state-json <json>`. With none, stdin is the state text when question flags are present, otherwise a full request `{state, questions}`.
+- Questions, repeatable, keys default to `q1`, `q2` unless written `key=instructions`: `--bool "<q>"`, `--choice "<q>" --options "a=desc,b=desc"`, `--score "<q>" --scale "low,mid,high"`, `--questions <json>` to merge a raw object.
+- `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
+- `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
+- `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
+- `--provider <name>` selects the gateway (default `vercel`, or env `JEV_PROVIDER`). Only `vercel` exists today; an unknown name exits 1 with `bad_request` and lists the supported ones. Leave it unset unless the user asks for a specific gateway.
+- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
+
+Answer shapes:
+
+| Type | Give | Get |
+|---|---|---|
+| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1 |
+| `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities`, `confidence` |
+| `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
+
+As a module from Node code:
+
+```js
+import { evaluate, ask, choose, score, JevError } from './scripts/jev.mjs';
+await ask(state, instructions, criteria?);                // number
+await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
+await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
+await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answers, usage, requestId }
+```
+
+---
+
+## hooks/protocol.md
+
+# Jev decision protocol (active for this session)
+
+The `better-call-jev` plugin is loaded. In this session you do not make judgment calls yourself. Every decision you would otherwise settle by intuition is delegated to Jev, a fast evaluation model that returns calibrated probabilities over options you declare. You frame the options and gather the evidence; Jev decides; you act on the result.
+
+## The rule
+
+Before you act on any decision that is not mechanically determined by the evidence or the user's explicit words, run it through Jev. This applies to every kind of task, not only code. It includes, without exception:
+
+- which of several options, approaches, locations, or candidates to pick
+- whether an action is safe to take without asking the user
+- whether a request is ambiguous enough to ask a question back
+- whether what you produced satisfies the request, and whether it does more than asked
+- what caused a failure, error, or discrepancy
+- whether something needs a further step: a test, a citation, a review, a follow-up
+- whether a subagent's or tool's result answers its brief before you relay or act on it
+- how to classify, prioritise, rank, or route anything
+- whether a claim is supported by the evidence you have
+- whether you are done, before you report completion
+
+A decision is "mechanically determined" only when the evidence, a command's output, or the user's words leave exactly one option. Everything else goes to Jev. The skill `jev` documents decomposition patterns (gate, verify, compare, rank, classify, grade, detect, attribute, narrow, self-check) and how to apply them per domain.
+
+## How
+
+1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, structured as an object such as `{ request, diff, testOutput }`.
+2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
+3. Batch every question you have about the same evidence into one call.
+4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
+5. Act on the answer. Boolean above 0.8 or below 0.2 is decided. Between, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
+
+## What Jev cannot do
+
+Jev picks among options you declare. Generating code, prose, or an open-ended answer is not a decision and stays with you. When you are unsure what the options even are, list the candidates first, then ask Jev to choose.
+
+## Reporting
+
+When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls.
+
+## Degraded service
+
+Jev must never slow you down. Calls time out after 8 seconds by default and exit with code `timeout`. On a `timeout`, `unavailable`, or `rate_limited` error: do not retry that call, decide it yourself, and mark the decision unverified in your report. If two consecutive calls fail this way, stop calling Jev for the rest of the session, say so once, and mark every later judgment unverified. If `JEV_API_KEY` is missing, tell the user once how to get and set one, as described in the skill's "If the key is missing" section: it is a Vercel AI Gateway API key from the Vercel dashboard, set as `JEV_API_KEY` in the shell profile, in `~/.claude/settings.json`, or in the project's gitignored `.claude/settings.local.json`. Then proceed the same way until it is set.
