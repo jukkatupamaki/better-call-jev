@@ -254,12 +254,18 @@
   .term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 12px; }
   .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
   .term-bar span { margin-left: auto; }
-  .term-body { padding: 16px 18px 18px; min-height: 236px; white-space: pre-wrap; word-break: break-word; }
+  .term-body { padding: 16px 18px 18px; min-height: 472px; white-space: pre-wrap; word-break: break-word; }
+  /* Narrow screens: shrink the type so the transcript keeps its own line breaks. */
+  @media (max-width: 480px) { .term { font-size: 11px; } .term-body { min-height: 412px; } }
   .term .p { color: var(--amber); }
   .term .c { color: var(--muted); }
   .term .s { color: var(--green); }
   .term .k { color: var(--fg); }
   .term .n { color: var(--amber-2); font-weight: 700; }
+  .term .b { color: var(--amber-2); }
+  .term .t { color: var(--fg); font-weight: 700; }
+  .term .reply { opacity: 0; transition: opacity .4s; }
+  .term .reply.on { opacity: 1; }
   .cursor { display: inline-block; width: 8px; height: 15px; background: var(--fg); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   .bar { margin-top: 12px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; opacity: 0; transition: opacity .3s; }
@@ -389,6 +395,7 @@
   @media (prefers-reduced-motion: reduce) {
     .js .r { opacity: 1; transform: none; transition: none; }
     .cursor { animation: none; }
+    .term .reply { transition: none; }
     .bar .fill, .viz .row .fill, .verdict .fill { transition: none; }
     html { scroll-behavior: auto; }
   }
@@ -421,9 +428,9 @@
     </div>
   </div>
 
-  <div class="term" aria-label="Terminal demo of Jev returning a probability">
-    <div class="term-bar"><i></i><i></i><i></i><span>zsh · jev</span></div>
-    <div class="term-body" id="term"><span class="p">$ </span><span class="cursor"></span></div>
+  <div class="term" aria-label="A Claude Code turn: the question goes to Jev, the answer comes back as a probability">
+    <div class="term-bar"><i></i><i></i><i></i><span>claude code · /jev</span></div>
+    <div class="term-body" id="term"><span class="c">&gt; </span><span class="cursor"></span></div>
   </div>
 </header>
 
@@ -698,46 +705,38 @@ overreaches  0.07  no</span>
     });
   });
 
-  // Typed terminal hero.
+  // Typed hero: one Claude Code turn, with the judgement delegated to Jev.
   const term = document.getElementById('term');
-  const cmd = 'echo "Card charged twice" | node jev.mjs --bool "Is the customer asking for a refund?"';
+  const ask = '/jev is the customer asking for a refund?';
+  const line = (typed) => `<span class="c">&gt; </span><span class="p">${typed.slice(0, 4)}</span>${typed.slice(4)}`;
+  const call = [
+    '<span class="b">⏺</span> <span class="t">Bash</span>(node jev.mjs --state-file ticket.md',
+    '    --bool <span class="s">"refund=Is the customer asking</span>',
+    '    <span class="s">for a refund?"</span>)'
+  ].join('\n');
   const out = [
-    '{',
-    '  <span class="k">"refund"</span>: {',
-    '    <span class="k">"type"</span>: <span class="s">"boolean"</span>,',
-    '    <span class="k">"probability"</span>: <span class="n">0.31</span>',
-    '  }',
-    '}'
+    '  <span class="c">⎿</span>  {',
+    '       <span class="k">"refund"</span>: {',
+    '         <span class="k">"type"</span>: <span class="s">"boolean"</span>,',
+    '         <span class="k">"probability"</span>: <span class="n">0.31</span>,',
+    '         <span class="k">"verdict"</span>: <span class="s">"undecided"</span>',
+    '       }',
+    '     }'
   ];
-  const finalBar = `<div class="bar" id="bar"><div class="track"><div class="fill" id="fill"></div></div><span class="val" id="val">0.00</span><span class="lbl">P(refund) · below 0.8: not decided, ask for more</span></div>`;
+  const finalBar = `<div class="bar" id="bar"><div class="track"><div class="fill" id="fill"></div></div><span class="val" id="val">0.00</span><span class="lbl">P(refund) · undecided, 0.2–0.8 · 212 ms</span></div>`;
+  const reply = `<span class="reply" id="reply">\n<span class="b">⏺</span> <span class="n">0.31</span>, undecided. Not acting on it as a\n  refund request — asking what they want.</span>`;
+  const tail = `\n\n<span class="c">&gt; </span><span class="cursor"></span>`;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  async function run() {
+  const settle = () => {
+    const bar = document.getElementById('bar'), fill = document.getElementById('fill'), val = document.getElementById('val');
     if (reduce) {
-      term.innerHTML = `<span class="p">$ </span>${cmd}\n${out.join('\n')}${finalBar}<span class="p">\n$ </span><span class="cursor"></span>`;
-      document.getElementById('bar').classList.add('on');
-      document.getElementById('fill').style.width = '31%';
-      document.getElementById('val').textContent = '0.31';
+      bar.classList.add('on');
+      fill.style.width = '31%';
+      val.textContent = '0.31';
+      document.getElementById('reply').classList.add('on');
       return;
     }
-    await sleep(500);
-    let typed = '';
-    for (const ch of cmd) {
-      typed += ch;
-      term.innerHTML = `<span class="p">$ </span>${typed}<span class="cursor"></span>`;
-      await sleep(ch === ' ' ? 40 : 22 + Math.random() * 30);
-    }
-    await sleep(320);
-    term.innerHTML = `<span class="p">$ </span>${typed}\n<span class="c">… 212 ms</span>`;
-    await sleep(520);
-    let body = `<span class="p">$ </span>${typed}\n`;
-    for (const line of out) {
-      body += line + '\n';
-      term.innerHTML = body;
-      await sleep(60);
-    }
-    term.innerHTML = body.trimEnd() + finalBar + `<span class="p">\n$ </span><span class="cursor"></span>`;
-    const bar = document.getElementById('bar'), fill = document.getElementById('fill'), val = document.getElementById('val');
     requestAnimationFrame(() => { bar.classList.add('on'); fill.style.width = '31%'; });
     const t0 = performance.now();
     (function tick() {
@@ -746,6 +745,34 @@ overreaches  0.07  no</span>
       val.textContent = (0.31 * eased).toFixed(2);
       if (k < 1) requestAnimationFrame(tick);
     })();
+    setTimeout(() => document.getElementById('reply').classList.add('on'), 1200);
+  };
+
+  async function run() {
+    const frame = (body) => `${line(ask)}\n\n${body}`;
+    if (reduce) {
+      term.innerHTML = frame(`${call}\n${out.join('\n')}`) + finalBar + reply + tail;
+      settle();
+      return;
+    }
+    await sleep(500);
+    let typed = '';
+    for (const ch of ask) {
+      typed += ch;
+      term.innerHTML = `${line(typed)}<span class="cursor"></span>`;
+      await sleep(ch === ' ' ? 40 : 22 + Math.random() * 30);
+    }
+    await sleep(340);
+    term.innerHTML = frame(`${call}\n  <span class="c">⎿  Running…</span>`);
+    await sleep(560);
+    let body = call + '\n';
+    for (const l of out) {
+      body += l + '\n';
+      term.innerHTML = frame(body);
+      await sleep(60);
+    }
+    term.innerHTML = frame(body.trimEnd()) + finalBar + reply + tail;
+    settle();
   }
   run();
 })();
