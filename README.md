@@ -1,5 +1,7 @@
 # better-call-jev
 
+[![test](https://github.com/jukkatupamaki/better-call-jev/actions/workflows/test.yml/badge.svg)](https://github.com/jukkatupamaki/better-call-jev/actions/workflows/test.yml)
+
 Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation model, packaged as a Claude Code plugin.
 
 - `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
@@ -55,7 +57,7 @@ env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --b
 ## Tests
 
 ```bash
-node --test 'test/*.test.mjs'
+node --test test/*.test.mjs
 ```
 
 No dependencies, no network, no key needed. The suite stubs `fetch` for transport and provider logic, runs a local HTTP server for timeout and CLI cases, and spawns the real script, including through a symlink, to cover entrypoint detection, argument parsing, stdin modes, output shape, and exit codes. The `test/` folder is not part of the shipped skill.

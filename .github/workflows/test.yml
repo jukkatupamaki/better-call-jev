@@ -1,0 +1,52 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22, 24]
+    env:
+      # Belt and braces: the suite never needs a key or network, and must not
+      # pick one up from the runner environment.
+      JEV_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run tests
+        # Unquoted so the shell expands it: node --test only accepts glob
+        # patterns itself from Node 21 onwards.
+        run: node --test test/*.test.mjs
+
+  validate-plugin:
+    name: plugin manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check manifests are valid JSON with matching versions
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = JSON.parse(fs.readFileSync(".claude-plugin/plugin.json", "utf8"));
+            const m = JSON.parse(fs.readFileSync(".claude-plugin/marketplace.json", "utf8"));
+            const h = JSON.parse(fs.readFileSync("hooks/hooks.json", "utf8"));
+            if (!p.name || !p.version) throw new Error("plugin.json needs name and version");
+            if (m.plugins[0].version !== p.version) throw new Error(`version mismatch: plugin.json ${p.version} vs marketplace.json ${m.plugins[0].version}`);
+            if (m.plugins[0].name !== p.name) throw new Error("plugin name mismatch between manifests");
+            if (!h.hooks?.SessionStart) throw new Error("hooks.json missing SessionStart");
+            if (!fs.existsSync("skills/jev/SKILL.md")) throw new Error("skills/jev/SKILL.md missing");
+            if (!fs.existsSync("hooks/protocol.md")) throw new Error("hooks/protocol.md missing");
+            console.log(`ok: ${p.name}@${p.version}`);
+          '
