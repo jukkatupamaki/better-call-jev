@@ -1,4 +1,4 @@
-# jev
+# better-call-jev
 
 Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation model, packaged as a Claude Code plugin.
 
@@ -19,14 +19,14 @@ Provider note: requests are currently served through Vercel AI Gateway, so the k
 
 ## Install
 
-**As a plugin** (recommended; works for you and for others once this repo is on GitHub):
+**As a plugin** (recommended):
 
 ```
-/plugin marketplace add <github-user>/<repo>
-/plugin install jev@jev
+/plugin marketplace add jukkatupamaki/better-call-jev
+/plugin install better-call-jev@better-call-jev
 ```
 
-Add `--scope project` to record it in the consuming repo's `.claude/settings.json`. Update with `/plugin update jev@jev`. The skill is invoked as `/jev:jev`, or `/jev` when no other skill claims the name.
+Add `--scope project` to record it in the consuming repo's `.claude/settings.json`. Update with `/plugin update better-call-jev@better-call-jev`. The skill is invoked as `/better-call-jev:jev`, or `/jev` when no other skill claims the name.
 
 **Local development** of this repo:
 

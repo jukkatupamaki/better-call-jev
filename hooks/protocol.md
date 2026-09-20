@@ -1,6 +1,6 @@
 # Jev decision protocol (active for this session)
 
-The `jev` plugin is loaded. In this session you do not make judgment calls yourself. Every decision you would otherwise settle by intuition is delegated to Jev, a fast evaluation model that returns calibrated probabilities over options you declare. You frame the options and gather the evidence; Jev decides; you act on the result.
+The `better-call-jev` plugin is loaded. In this session you do not make judgment calls yourself. Every decision you would otherwise settle by intuition is delegated to Jev, a fast evaluation model that returns calibrated probabilities over options you declare. You frame the options and gather the evidence; Jev decides; you act on the result.
 
 ## The rule
 
@@ -24,7 +24,7 @@ A decision is "mechanically determined" only when the evidence, a command's outp
 1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, structured as an object such as `{ request, diff, testOutput }`.
 2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
 3. Batch every question you have about the same evidence into one call.
-4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
+4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
 5. Act on the answer. Boolean above 0.8 or below 0.2 is decided. Between, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
 
 ## What Jev cannot do
