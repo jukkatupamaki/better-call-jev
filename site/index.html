@@ -191,8 +191,13 @@
   p a, li a, td a, footer a { border-bottom: 1px solid var(--line-2); }
   p a:hover, li a:hover, td a:hover, footer a:hover { border-color: var(--amber-2); }
 
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
-  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+  .wrap {
+    max-width: 1040px; margin: 0 auto;
+    --gutter: 20px;
+    padding-left: max(var(--gutter), env(safe-area-inset-left));
+    padding-right: max(var(--gutter), env(safe-area-inset-right));
+  }
+  @media (min-width: 720px) { .wrap { --gutter: 32px; } }
 
   .serif { font-family: var(--display); font-weight: 800; letter-spacing: -.055em; }
 
@@ -215,8 +220,8 @@
   .gh svg { width: 15px; height: 15px; fill: currentColor; }
 
   /* hero */
-  .hero { padding: 72px 0 48px; display: grid; gap: 40px; align-items: center; }
-  @media (min-width: 900px) { .hero { grid-template-columns: 1.05fr 1fr; padding: 96px 0 72px; gap: 56px; } }
+  .hero { padding-block: 72px 48px; display: grid; gap: 40px; align-items: center; }
+  @media (min-width: 900px) { .hero { grid-template-columns: 1.05fr 1fr; padding-block: 96px 72px; gap: 56px; } }
   .eyebrow {
     display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
     color: var(--muted); border: 1px solid var(--line-2); padding: 5px 11px; border-radius: 999px; margin-bottom: 26px;
