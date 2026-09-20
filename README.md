@@ -95,3 +95,5 @@ Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketpl
 ## Website
 
 The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it.
+
+The social card `site/og.png` is rendered from `tools/og.html`, which mirrors the hero. Edit the HTML and regenerate it with `node tools/og.mjs` (needs `playwright` and a Chromium; set `CHROMIUM` to reuse one you already have). Keep its terminal transcript in step with the hero animation.

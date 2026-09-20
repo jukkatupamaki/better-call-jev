@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Better Call Jev · og:image source</title>
+<!--
+  Source for site/og.png (1200×630). Render it with:
+    node tools/og.mjs
+  Keep the terminal transcript in step with the hero animation in site/index.html.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@800&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d0d;
+    --bg-2: #101415;
+    --fg: #e6ebea;
+    --muted: #8f9a99;
+    --dim: #55605f;
+    --line: #1d2425;
+    --line-2: #293233;
+    --amber: #0f8b8d;
+    --amber-2: #22a7a9;
+    --amber-soft: rgba(34, 167, 169, .14);
+    --green: #8fd694;
+    --dot: rgba(230, 235, 234, .07);
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; width: 1200px; height: 630px; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    position: relative; width: 1200px; height: 630px;
+    display: grid; grid-template-columns: 1fr 480px; align-items: center; gap: 48px;
+    padding: 0 72px;
+  }
+  .card::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 100%);
+  }
+  .card > * { position: relative; z-index: 1; min-width: 0; }
+
+  .eyebrow {
+    display: inline-block; font-family: var(--mono); font-size: 15px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--line-2); border-radius: 999px; padding: 7px 16px;
+  }
+  h1 {
+    font-family: "Geist", Inter, sans-serif; font-weight: 800; letter-spacing: -.055em;
+    font-size: 96px; line-height: .9; margin: 30px 0 26px;
+  }
+  h1 em { font-style: normal; color: var(--amber-2); }
+  .lede { font-size: 23px; line-height: 1.45; color: var(--muted); margin: 0; max-width: 520px; }
+  .lede b { color: var(--fg); font-weight: 500; }
+  .domain {
+    position: absolute; left: 72px; bottom: 54px; z-index: 1;
+    font-family: var(--mono); font-size: 16px; color: var(--dim);
+  }
+
+  .term {
+    font-family: var(--mono); font-size: 15px; line-height: 1.7;
+    background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 14px;
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.85); overflow: hidden; position: relative;
+  }
+  .term::after {
+    content: ""; position: absolute; inset: -1px; border-radius: 14px; pointer-events: none;
+    background: linear-gradient(135deg, var(--amber-soft), transparent 40%); opacity: .9;
+  }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 13px 18px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 14px; }
+  .term-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line-2); }
+  .term-bar span { margin-left: auto; }
+  .term-body { padding: 20px 22px 22px; white-space: pre; }
+  .p { color: var(--amber); }
+  .c { color: var(--muted); }
+  .s { color: var(--green); }
+  .k { color: var(--fg); }
+  .n { color: var(--amber-2); font-weight: 700; }
+  .b { color: var(--amber-2); }
+  .t { color: var(--fg); font-weight: 700; }
+
+  .bar { margin-top: 16px; display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; }
+  .bar .track { height: 9px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .bar .fill { height: 100%; width: 31%; background: linear-gradient(90deg, var(--amber), var(--amber-2)); border-radius: 999px; }
+  .bar .val { color: var(--amber-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bar .lbl { grid-column: 1 / -1; color: var(--dim); font-size: 13.5px; margin-top: -2px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div>
+    <span class="eyebrow">Claude Code plugin</span>
+    <h1>Better Call<br><em>Jev.</em></h1>
+    <p class="lede">Give Jev the evidence and a bounded question. Get back <b>a calibrated probability</b>, not a paragraph.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-bar"><i></i><i></i><i></i><span>claude code · /jev</span></div>
+    <div class="term-body"><span class="c">&gt; </span><span class="p">/jev</span> is the customer asking for a refund?
+
+<span class="b">⏺</span> <span class="t">Bash</span>(node jev.mjs --state-file ticket.md
+    --bool <span class="s">"refund=Is the customer asking</span>
+    <span class="s">for a refund?"</span>)
+  <span class="c">⎿</span>  {
+       <span class="k">"refund"</span>: {
+         <span class="k">"type"</span>: <span class="s">"boolean"</span>,
+         <span class="k">"probability"</span>: <span class="n">0.31</span>,
+         <span class="k">"verdict"</span>: <span class="s">"undecided"</span>
+       }
+     }<div class="bar"><div class="track"><div class="fill"></div></div><span class="val">0.31</span><span class="lbl">P(refund) · undecided, 0.2–0.8 · 212 ms</span></div></div>
+  </div>
+
+  <span class="domain">bettercalljev.com</span>
+</div>
+</body>
+</html>
