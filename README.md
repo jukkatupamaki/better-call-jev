@@ -92,4 +92,4 @@ Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketpl
 
 ## Website
 
-The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it. `site/CNAME` holds the custom domain. One-time setup: in the repo's Settings, Pages, set Source to "GitHub Actions" and enter the domain under Custom domain; at Cloudflare, add DNS-only (grey cloud) records for the apex pointing at GitHub Pages' A/AAAA addresses and a `www` CNAME to `jukkatupamaki.github.io`, then tick "Enforce HTTPS" once the certificate is issued. The `.ai` domain should redirect to `.com` via a Cloudflare redirect rule.
+The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it.
