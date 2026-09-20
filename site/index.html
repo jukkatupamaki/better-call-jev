@@ -205,10 +205,7 @@
   }
   nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 56px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 500; font-family: var(--mono); font-size: 14px; }
-  .brand .mark {
-    width: 24px; height: 24px; border-radius: 6px; background: var(--amber); color: var(--amber-ink);
-    display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 15px; line-height: 1;
-  }
+  .brand .mark { width: 22px; height: 22px; color: var(--amber-2); flex: none; }
   nav ul { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; font-size: 14px; font-weight: 500; color: var(--muted); }
   nav ul a:hover { color: var(--fg); }
   nav ul li:nth-child(-n+3) { display: none; }
@@ -377,7 +374,7 @@
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#top"><span class="mark">J</span>better-call-jev</a>
+    <a class="brand" href="#top"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-opacity=".22" stroke-width="3.5"/><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="43.8 53.4" transform="rotate(-90 12 12)"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>better-call-jev</a>
     <ul>
       <li><a href="#what">What</a></li>
       <li><a href="#why">Why</a></li>
