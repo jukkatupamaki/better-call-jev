@@ -2,7 +2,7 @@
 
 > A zero-dependency Claude Code plugin and Node client for Jev, TypeSafe AI's evaluation model. Give it evidence and a bounded question; get back a calibrated probability, a choice among named options, or a score on a rubric, instead of prose.
 
-Better Call Jev (package name `better-call-jev`, v0.1.0, MIT) is a judgement primitive for agents. It does not generate or explain. It judges. Put everything a decision depends on into `state`, ask one or more typed questions, and act on the numbers. With the plugin installed, a SessionStart hook routes every judgement call in Claude Code through Jev: which option to pick, whether an action is safe, whether a diff does what was asked and nothing more, whether a task is actually done.
+Better Call Jev (package name `better-call-jev`, v0.2.0, MIT) is a judgement primitive for agents. It does not generate or explain. It judges. Put everything a decision depends on into `state`, ask one or more typed questions, and act on the numbers. With the plugin installed, a SessionStart hook routes every judgement call in Claude Code through Jev: which option to pick, whether an action is safe, whether a diff does what was asked and nothing more, whether a task is actually done.
 
 Three answer shapes:
 - `boolean`: a yes/no with stated truth conditions. Returns `probability` from 0 to 1.

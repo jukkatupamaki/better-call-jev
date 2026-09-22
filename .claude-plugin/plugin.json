@@ -1,7 +1,7 @@
 {
   "name": "better-call-jev",
   "description": "Low-level judgement primitive for Claude Code: calibrated yes/no, choice, and rubric-score answers over any text or JSON, applied to code, documents, data, plans, claims, and agent outputs.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Jukka Tupamäki",
     "email": "jukka@lemanse.fi"
