@@ -7,7 +7,7 @@ description: Low-level judgement primitive. Turns any question with a bounded an
 
 Jev is an evaluation model. Give it evidence (`state`: text, an object, or an array) and one or more typed questions, and it returns calibrated probabilities instead of prose. It does not generate, explain, or reason aloud. It judges. That makes it a building block: almost any decision can be decomposed into a few typed questions over the right evidence, and the answers can be acted on directly by code or by you.
 
-When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
+This plugin exists so that you, the agent, can call Jev easily for your own decisions. When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
 
 ## The method
 
@@ -23,6 +23,26 @@ Every use of Jev is the same three moves.
 
 Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
 
+## Writing good questions
+
+This section and the next adapt the question-design guidance in TypeSafe's official skill ([typesafe-ai/skills](https://github.com/typesafe-ai/skills/blob/main/skills/typesafe-ai/SKILL.md), MIT) to Jev calls you make yourself.
+
+- **One narrow judgement per question.** Split dimensions that matter on their own (correct, in scope, tested) into separate questions over the same state. Narrow does not mean trivial: "which of these three fixes addresses the reported cause" is one coherent judgement.
+- **Keys are invisible to Jev.** Only `state`, `instructions` and `criteria` reach the model. `risky` as a key with instructions "Rate it" asks nothing; put the full meaning in the instructions.
+- **Point at the evidence.** With structured state, name the field in backticks: "Does `diff` implement what `request` asks?". Nested paths such as `ticket.messages[0].text` work too.
+- **Criteria define the answers.** The instructions ask; the criteria say what each answer means. Every score rung must describe a concrete situation that stands on its own, not "somewhat better than the previous rung". Criteria can be structured objects when definitions, exclusions, or examples make the boundary clearer.
+- **Keep a way out.** Jev cannot pick an option you did not list. Add `none` or `other` when nothing may fit. When checking whether a value is in the evidence, make sure the candidates you offer actually include it.
+- **Ask independent questions together.** Questions in one call run in parallel and cannot see each other's answers. Asking something you may not need (a follow-up that only matters if the first answer is yes) is fine: state its premise in the instructions and ignore the answer if it does not apply. Make a second call only when the first answer changes what evidence to gather or which options exist.
+
+## Reading the answers
+
+- **A boolean near 0.5 means "can't tell", not "partly true".** It is not a measure of degree. Use a `score` for degree.
+- **Confidence on a choice or score measures how peaked the distribution is.** It is not permission to act. Two options that are both acceptable split the probability; a low confidence between harmless alternatives is fine to act on.
+- **Ignore uncertainty in answers you do not use.** A speculative question that came back undecided on a branch you did not take needs no follow-up.
+- **Keep the raw numbers.** Changing how you weigh or combine answers does not need a new call if the evidence and questions are unchanged. Combine with explicit rules: a weighted average for trade-offs, but "any serious problem blocks" needs one boolean per problem, not an average.
+- **A typed answer is well formed, not necessarily true.** When a wrong answer is costly, check a few cases where you already know the outcome, and escalate undecided cases to the user rather than forcing them.
+- **When an answer looks wrong, find out which part failed:** missing evidence, a badly worded question, the model, or your own logic. Fix that part; do not just ask the same question again.
+
 Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage under 2 means expand; otherwise ship.
 
 ## Decomposition patterns
@@ -35,7 +55,7 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 **Compare two.** State is `{ a, b, goal }`. Ask a `choice` between `a` and `b` with the goal as instructions, or a `boolean` "Is a better than b for the goal?" Prefer the choice; its probabilities tell you how close the race is.
 
-**Rank many.** One `score` question with the same rubric, one call per item, then sort by `score`. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
+**Rank many.** One `score` question per item, all with the same rubric, batched into one call with the items in `state` under their keys. Then sort by `score`. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
 
 **Classify.** One `choice` with a category per option and an `other`. For multi-label, one `boolean` per label instead.
 
