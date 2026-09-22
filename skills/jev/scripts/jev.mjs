@@ -158,6 +158,91 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
   return result;
 }
 
+// Local call log ----------------------------------------------------------------
+//
+// Every evaluate() call appends one JSON line to a local file. Nothing leaves the
+// machine. Logging must never slow down or break a call: it runs after the
+// response, is a single synchronous append, and swallows every error.
+//
+//   JEV_LOG      full (default) | meta (no state, only its hash and size) | off
+//   JEV_LOG_DIR  Directory for the log. Defaults to $CLAUDE_PLUGIN_DATA/logs,
+//                then $XDG_STATE_HOME/jev, then ~/.local/state/jev.
+//
+// Files are monthly (calls-YYYY-MM.jsonl, UTC), created 0600 in a 0700 dir.
+// `retain: false` downgrades full to meta: the caller asked for the state not to be kept.
+
+const LOG_SCHEMA_VERSION = 1;
+const LOG_LEVELS = ['full', 'meta', 'off'];
+
+export function logLevel() {
+  const v = (process.env.JEV_LOG || 'full').toLowerCase();
+  if (v === '0' || v === 'false' || v === 'no') return 'off';
+  return LOG_LEVELS.includes(v) ? v : 'full';
+}
+
+export async function logDir() {
+  const { join } = await import('node:path');
+  if (process.env.JEV_LOG_DIR) return process.env.JEV_LOG_DIR;
+  if (process.env.CLAUDE_PLUGIN_DATA) return join(process.env.CLAUDE_PLUGIN_DATA, 'logs');
+  if (process.env.XDG_STATE_HOME) return join(process.env.XDG_STATE_HOME, 'jev');
+  const { homedir } = await import('node:os');
+  return join(homedir(), '.local', 'state', 'jev');
+}
+
+export function logFileName(date) {
+  return `calls-${date.toISOString().slice(0, 7)}.jsonl`;
+}
+
+async function writeLog(record) {
+  try {
+    const { mkdirSync, appendFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = await logDir();
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const line = JSON.stringify(record) + '\n';
+    appendFileSync(join(dir, logFileName(new Date(record.ts))), line, { mode: 0o600 });
+  } catch {
+    // Logging is best effort by design.
+  }
+}
+
+async function logCall({ id, startedAt, t0, state, questions, retain, provider, caller, result, error }) {
+  let level = logLevel();
+  if (level === 'off') return;
+  if (retain === false && level === 'full') level = 'meta';
+  try {
+    const { createHash } = await import('node:crypto');
+    const stateText = typeof state === 'string' ? state : JSON.stringify(state) ?? '';
+    const record = {
+      v: LOG_SCHEMA_VERSION,
+      id,
+      ts: startedAt.toISOString(),
+      endTs: new Date().toISOString(),
+      latencyMs: Math.round((performance.now() - t0) * 10) / 10,
+      session: process.env.JEV_SESSION_ID || null,
+      caller,
+      provider: provider || process.env.JEV_PROVIDER || DEFAULT_PROVIDER,
+      level,
+      retain,
+      status: error ? error.code || 'unknown' : 'ok',
+      http: error?.status ?? null,
+      requestId: result?.requestId ?? null,
+      usage: result?.usage ?? null,
+      stateHash: 'sha256:' + createHash('sha256').update(stateText).digest('hex'),
+      stateBytes: Buffer.byteLength(stateText),
+      stateType: Array.isArray(state) ? 'array' : typeof state,
+      stateKeys: state && typeof state === 'object' && !Array.isArray(state) ? Object.keys(state) : null,
+      questions,
+      answers: result?.answers ?? null,
+      error: error ? error.message : null,
+    };
+    if (level === 'full') record.state = state;
+    await writeLog(record);
+  } catch {
+    // Never let logging affect the call.
+  }
+}
+
 // Public API ---------------------------------------------------------------------
 
 export class JevError extends Error {
@@ -189,12 +274,22 @@ export class JevError extends Error {
  *         | { type: 'choice',  choice: string, probabilities: Record<string, number>, confidence: number }
  *         | { type: 'score',   score: number,  probabilities: Record<string, number>, confidence: number }} Answer
  */
-export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS, provider }) {
+export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS, provider, caller = 'module' }) {
   if (state === undefined) throw new JevError('bad_request', '`state` is required.');
   if (!questions || Object.keys(questions).length === 0) {
     throw new JevError('bad_request', 'At least one question is required.');
   }
-  return transport({ state, questions, retain, timeoutMs, provider });
+  const { randomUUID } = await import('node:crypto');
+  const ctx = { id: randomUUID(), startedAt: new Date(), t0: performance.now(), state, questions, retain, provider, caller };
+  let result;
+  try {
+    result = await transport({ state, questions, retain, timeoutMs, provider });
+  } catch (error) {
+    await logCall({ ...ctx, error });
+    throw error;
+  }
+  await logCall({ ...ctx, result });
+  return result;
 }
 
 /** Boolean question → probability of true (0..1). `criteria` is optional { true, false }. */
@@ -281,7 +376,7 @@ Options:
   --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_SESSION_ID (optional)
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 
@@ -393,7 +488,7 @@ async function main(argv) {
 
   if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}\n\n${USAGE}`);
 
-  const result = await evaluate({ state, questions, retain, timeoutMs, provider });
+  const result = await evaluate({ state, questions, retain, timeoutMs, provider, caller: 'cli' });
   for (const a of Object.values(result.answers)) {
     if (a.type === 'boolean') a.verdict = verdict(a.probability, t);
   }

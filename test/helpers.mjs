@@ -2,9 +2,14 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const SCRIPT = join(ROOT, 'skills', 'jev', 'scripts', 'jev.mjs');
+
+// Keep the call log out of the real state dir. Tests may override JEV_LOG_DIR.
+export const TEST_LOG_DIR = mkdtempSync(join(tmpdir(), 'jev-test-log-'));
 
 /** A canned Vercel-shaped success body for the given question keys/types. */
 export function vercelBody(questions, extra = {}) {
@@ -52,7 +57,7 @@ export async function withFetch(handler, fn) {
 export async function withEnv(env, fn) {
   const saved = { ...process.env };
   for (const k of Object.keys(process.env)) delete process.env[k];
-  Object.assign(process.env, { PATH: saved.PATH }, env);
+  Object.assign(process.env, { PATH: saved.PATH, JEV_LOG_DIR: TEST_LOG_DIR }, env);
   try {
     return await fn();
   } finally {
@@ -93,7 +98,7 @@ export async function startServer(respond) {
 export function runCli(args, { stdin, env = {}, script = SCRIPT } = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [script, ...args], {
-      env: { PATH: process.env.PATH, ...env },
+      env: { PATH: process.env.PATH, JEV_LOG_DIR: TEST_LOG_DIR, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
