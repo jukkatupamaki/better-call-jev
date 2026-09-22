@@ -8,6 +8,11 @@
             "type": "command",
             "command": "cat \"${CLAUDE_PLUGIN_ROOT}/hooks/protocol.md\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-env.mjs\"",
+            "timeout": 5
           }
         ]
       }
