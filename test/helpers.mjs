@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const SCRIPT = join(ROOT, 'skills', 'jev', 'scripts', 'jev.mjs');
 
-// Keep the call log out of the real state dir. Tests may override JEV_LOG_DIR.
+// Keep the call log out of the real state dir, and keep one test's 429 from
+// short-circuiting the next (in-process tests share the rate-limit breaker).
 export const TEST_LOG_DIR = mkdtempSync(join(tmpdir(), 'jev-test-log-'));
 
 /** A canned Vercel-shaped success body for the given question keys/types. */
@@ -57,7 +58,7 @@ export async function withFetch(handler, fn) {
 export async function withEnv(env, fn) {
   const saved = { ...process.env };
   for (const k of Object.keys(process.env)) delete process.env[k];
-  Object.assign(process.env, { PATH: saved.PATH, JEV_LOG_DIR: TEST_LOG_DIR }, env);
+  Object.assign(process.env, { PATH: saved.PATH, JEV_LOG_DIR: TEST_LOG_DIR, JEV_COOLDOWN_MS: '0' }, env);
   try {
     return await fn();
   } finally {

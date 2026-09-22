@@ -130,6 +130,10 @@ Answer shapes:
 | `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities`, `confidence` |
 | `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
 
+Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the protocol (batch per evidence, no retries, stop after repeated failures) applies unchanged.
+
+Many items (tens or hundreds) are not many calls. First narrow them without Jev: filter, dedupe, or sample. Then put several items into one call as an array or keyed object, with one question per item or a `choice`/`score` over the set. Never fan out with `Promise.all`. The client allows only 4 requests in flight per process (`JEV_CONCURRENCY`). After a `rate_limited` error it refuses every further call in that process for the cooldown (`Retry-After`, else `JEV_COOLDOWN_MS`, default 30 s), so a burst fails fast rather than finishing.
+
 As a module from Node code:
 
 ```js

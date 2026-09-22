@@ -148,7 +148,10 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
   if (!res.ok || upstreamError) {
     const upstream = upstreamError || data?.message || text;
     const code = res.ok ? 'unknown' : classify(res.status);
-    throw new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
+    const err = new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
+    const retryAfter = res.headers.get('retry-after');
+    if (retryAfter != null) err.retryAfter = retryAfter;
+    throw err;
   }
 
   const result = provider.parseResponse(data, res);
@@ -283,7 +286,7 @@ export async function evaluate({ state, questions, retain = true, timeoutMs = DE
   const ctx = { id: randomUUID(), startedAt: new Date(), t0: performance.now(), state, questions, retain, provider, caller };
   let result;
   try {
-    result = await transport({ state, questions, retain, timeoutMs, provider });
+    result = await guarded(() => transport({ state, questions, retain, timeoutMs, provider }));
   } catch (error) {
     await logCall({ ...ctx, error });
     throw error;
@@ -291,6 +294,64 @@ export async function evaluate({ state, questions, retain = true, timeoutMs = DE
   await logCall({ ...ctx, result });
   return result;
 }
+
+// Guards -------------------------------------------------------------------------
+//
+// Protect the gateway from bulk callers (e.g. Promise.all over hundreds of items):
+//   - At most JEV_CONCURRENCY (default 4) requests in flight per process; the rest queue.
+//   - After a rate_limited response, every call in this process fails fast with
+//     rate_limited, without a request, for the Retry-After period or
+//     JEV_COOLDOWN_MS (default 30000). Queued calls fail fast too.
+
+const guard = { active: 0, queue: [], openUntil: 0 };
+
+function concurrencyLimit() {
+  const n = Number(process.env.JEV_CONCURRENCY);
+  return Number.isInteger(n) && n > 0 ? n : 4;
+}
+
+function cooldownMs(error) {
+  const header = error?.retryAfter;
+  const s = Number(header);
+  if (header != null && Number.isFinite(s) && s >= 0) return s * 1000;
+  const env = Number(process.env.JEV_COOLDOWN_MS);
+  return Number.isFinite(env) && env >= 0 ? env : 30000;
+}
+
+function circuitError() {
+  const wait = Math.max(0, Math.ceil((guard.openUntil - Date.now()) / 1000));
+  return new JevError('rate_limited', `Jev is rate limited; not sending for another ${wait} s. Do not retry: decide yourself and mark it unverified.`);
+}
+
+// A finished call hands its slot straight to the next waiter, so `active` never
+// exceeds the limit even when new callers arrive between the two.
+async function acquire() {
+  if (guard.active < concurrencyLimit()) { guard.active++; return; }
+  await new Promise((resolve) => guard.queue.push(resolve));
+}
+
+function releaseSlot() {
+  const next = guard.queue.shift();
+  if (next) next();
+  else guard.active--;
+}
+
+async function guarded(fn) {
+  if (Date.now() < guard.openUntil) throw circuitError();
+  await acquire();
+  try {
+    if (Date.now() < guard.openUntil) throw circuitError();
+    return await fn();
+  } catch (error) {
+    if (error?.status === 429) {
+      guard.openUntil = Math.max(guard.openUntil, Date.now() + cooldownMs(error));
+    }
+    throw error;
+  } finally {
+    releaseSlot();
+  }
+}
+
 
 /** Boolean question → probability of true (0..1). `criteria` is optional { true, false }. */
 export async function ask(state, instructions, criteria) {
@@ -376,7 +437,7 @@ Options:
   --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_SESSION_ID (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_CONCURRENCY, JEV_COOLDOWN_MS, JEV_SESSION_ID (optional)
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 
