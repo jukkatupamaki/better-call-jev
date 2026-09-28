@@ -149,8 +149,8 @@ test('an unwritable log dir never breaks the call', async () => {
 test('log dir resolution order', async () => {
   await withEnv({ JEV_LOG_DIR: '/a', CLAUDE_PLUGIN_DATA: '/b', XDG_STATE_HOME: '/c' }, async () => assert.equal(await logDir(), '/a'));
   await withEnv({ JEV_LOG_DIR: '', CLAUDE_PLUGIN_DATA: '/b', XDG_STATE_HOME: '/c' }, async () => assert.equal(await logDir(), join('/b', 'logs')));
-  await withEnv({ JEV_LOG_DIR: '', XDG_STATE_HOME: '/c' }, async () => assert.equal(await logDir(), join('/c', 'jev')));
-  await withEnv({ JEV_LOG_DIR: '' }, async () => assert.match(await logDir(), /\.local[/\\]state[/\\]jev$/));
+  await withEnv({ JEV_LOG_DIR: '', XDG_STATE_HOME: '/c' }, async () => assert.equal(await logDir(), join('/c', 'better-call-jev')));
+  await withEnv({ JEV_LOG_DIR: '' }, async () => assert.match(await logDir(), /\.local[/\\]state[/\\]better-call-jev$/));
 });
 
 test('files are private', { skip: process.platform === 'win32' }, async () => {

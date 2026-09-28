@@ -169,7 +169,7 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
 //
 //   JEV_LOG      full (default) | meta (no state, only its hash and size) | off
 //   JEV_LOG_DIR  Directory for the log. Defaults to $CLAUDE_PLUGIN_DATA/logs,
-//                then $XDG_STATE_HOME/jev, then ~/.local/state/jev.
+//                then $XDG_STATE_HOME/better-call-jev, then ~/.local/state/better-call-jev.
 //
 // Files are monthly (calls-YYYY-MM.jsonl, UTC), created 0600 in a 0700 dir.
 // `retain: false` downgrades full to meta: the caller asked for the state not to be kept.
@@ -187,9 +187,9 @@ export async function logDir() {
   const { join } = await import('node:path');
   if (process.env.JEV_LOG_DIR) return process.env.JEV_LOG_DIR;
   if (process.env.CLAUDE_PLUGIN_DATA) return join(process.env.CLAUDE_PLUGIN_DATA, 'logs');
-  if (process.env.XDG_STATE_HOME) return join(process.env.XDG_STATE_HOME, 'jev');
+  if (process.env.XDG_STATE_HOME) return join(process.env.XDG_STATE_HOME, 'better-call-jev');
   const { homedir } = await import('node:os');
-  return join(homedir(), '.local', 'state', 'jev');
+  return join(homedir(), '.local', 'state', 'better-call-jev');
 }
 
 export function logFileName(date) {
