@@ -33,6 +33,19 @@ export function vercelBody(questions, extra = {}) {
   };
 }
 
+/** Stub fetch with a handler returning a Response; tracks in-flight and total requests. */
+export async function withStub(handler, fn) {
+  const original = globalThis.fetch;
+  const stats = { inFlight: 0, maxInFlight: 0, requests: 0 };
+  globalThis.fetch = async (...args) => {
+    stats.requests++;
+    stats.inFlight++;
+    stats.maxInFlight = Math.max(stats.maxInFlight, stats.inFlight);
+    try { return await handler(stats, ...args); } finally { stats.inFlight--; }
+  };
+  try { return await fn(stats); } finally { globalThis.fetch = original; }
+}
+
 /**
  * Replace globalThis.fetch for the duration of `fn`. `handler` receives (url, init)
  * and returns { status, body } (body is JSON-serialised) or throws to simulate a

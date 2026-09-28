@@ -4,23 +4,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluate } from '../skills/jev/scripts/jev.mjs';
-import { withEnv, vercelBody } from './helpers.mjs';
+import { withEnv, withStub, vercelBody } from './helpers.mjs';
 
 const Q = { ok: { type: 'boolean', instructions: 'ok?' } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** Stub fetch with a handler returning a Response; tracks in-flight and total requests. */
-async function withStub(handler, fn) {
-  const original = globalThis.fetch;
-  const stats = { inFlight: 0, maxInFlight: 0, requests: 0 };
-  globalThis.fetch = async (...args) => {
-    stats.requests++;
-    stats.inFlight++;
-    stats.maxInFlight = Math.max(stats.maxInFlight, stats.inFlight);
-    try { return await handler(stats, ...args); } finally { stats.inFlight--; }
-  };
-  try { return await fn(stats); } finally { globalThis.fetch = original; }
-}
 
 const ok = async () => { await sleep(10); return new Response(JSON.stringify(vercelBody(Q)), { status: 200 }); };
 const limited = (headers = {}) => async () => new Response(JSON.stringify({ error: { message: 'too many' } }), { status: 429, headers });

@@ -168,6 +168,9 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
 // response, is a single synchronous append, and swallows every error.
 //
 //   JEV_LOG      full (default) | meta (no state, only its hash and size) | off
+//
+// Read the log with scripts/log.mjs (summary, list, show, sessions), not directly:
+// it prints compact text instead of raw JSON.
 //   JEV_LOG_DIR  Directory for the log. Defaults to $CLAUDE_PLUGIN_DATA/logs,
 //                then $XDG_STATE_HOME/better-call-jev, then ~/.local/state/better-call-jev.
 //
@@ -213,6 +216,12 @@ async function logCall({ id, startedAt, t0, state, questions, retain, provider, 
   let level = logLevel();
   if (level === 'off') return;
   if (retain === false && level === 'full') level = 'meta';
+  // Calls the guard refused never reached the service. A burst can produce
+  // hundreds of them, so they get a minimal record that is only worth counting.
+  if (error?.refused) {
+    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'refused' });
+    return;
+  }
   try {
     const { createHash } = await import('node:crypto');
     const stateText = typeof state === 'string' ? state : JSON.stringify(state) ?? '';
@@ -320,7 +329,9 @@ function cooldownMs(error) {
 
 function circuitError() {
   const wait = Math.max(0, Math.ceil((guard.openUntil - Date.now()) / 1000));
-  return new JevError('rate_limited', `Jev is rate limited; not sending for another ${wait} s. Do not retry: decide yourself and mark it unverified.`);
+  const err = new JevError('rate_limited', `Jev is rate limited; not sending for another ${wait} s. Do not retry: decide yourself and mark it unverified.`);
+  err.refused = true;
+  return err;
 }
 
 // A finished call hands its slot straight to the next waiter, so `active` never
