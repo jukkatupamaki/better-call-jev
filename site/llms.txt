@@ -11,6 +11,8 @@ Three answer shapes:
 
 Thresholds: a boolean above 0.8 or below 0.2 is decided. In between, split the question or add evidence.
 
+Data: everything in a request goes to Vercel AI Gateway and TypeSafe AI, who may keep it. Never send secrets, credentials, personal or customer data, or anything confidential; mask the values or decide without Jev. The client refuses requests that look like they contain credentials or card numbers (error code `sensitive`).
+
 Install inside Claude Code: `/plugin marketplace add jukkatupamaki/better-call-jev` then `/plugin install better-call-jev@better-call-jev`. Set `JEV_API_KEY` (a Vercel AI Gateway key). Node 18+. Nothing to npm install. The skill is invoked as `/jev`.
 
 ## Docs

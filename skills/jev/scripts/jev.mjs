@@ -222,6 +222,11 @@ async function logCall({ id, startedAt, t0, state, questions, retain, provider, 
     await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'refused' });
     return;
   }
+  // Blocked for sensitive data: never write the request, not even locally.
+  if (error?.code === 'sensitive') {
+    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'sensitive', findings: error.findings });
+    return;
+  }
   try {
     const { createHash } = await import('node:crypto');
     const stateText = typeof state === 'string' ? state : JSON.stringify(state) ?? '';
@@ -258,7 +263,7 @@ async function logCall({ id, startedAt, t0, state, questions, retain, provider, 
 // Public API ---------------------------------------------------------------------
 
 export class JevError extends Error {
-  /** @param {'auth'|'bad_request'|'rate_limited'|'unavailable'|'timeout'|'unknown'} code */
+  /** @param {'auth'|'bad_request'|'rate_limited'|'sensitive'|'unavailable'|'timeout'|'unknown'} code */
   constructor(code, message, { status, cause } = {}) {
     super(message, cause !== undefined ? { cause } : undefined);
     this.name = 'JevError';
@@ -293,6 +298,14 @@ export async function evaluate({ state, questions, retain = true, timeoutMs = DE
   }
   const { randomUUID } = await import('node:crypto');
   const ctx = { id: randomUUID(), startedAt: new Date(), t0: performance.now(), state, questions, retain, provider, caller };
+  if (!allowSensitive()) {
+    const findings = findSensitive({ state, questions });
+    if (findings.length) {
+      const error = sensitiveError(findings);
+      await logCall({ ...ctx, error });
+      throw error;
+    }
+  }
   let result;
   try {
     result = await guarded(() => transport({ state, questions, retain, timeoutMs, provider }));
@@ -302,6 +315,91 @@ export async function evaluate({ state, questions, retain = true, timeoutMs = DE
   }
   await logCall({ ...ctx, result });
   return result;
+}
+
+// Sensitive data -------------------------------------------------------------------
+//
+// Everything in a request leaves the machine and goes to a third party. Before
+// sending, scan every string in `state` and `questions` for values that look like
+// credentials or card numbers, and refuse the call if any are found. This is a
+// backstop for obvious secrets, not a PII detector: names, addresses and business
+// secrets pass straight through, so the rule for callers remains "never put them
+// in state". The error and the log name the kind and location of each match,
+// never the matched text. JEV_ALLOW_SENSITIVE=1 disables the check; only the user
+// should ever set it.
+
+const SENSITIVE_PATTERNS = [
+  ['private key', /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/],
+  ['AWS access key', /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/],
+  ['GitHub token', /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})\b/],
+  ['Slack token', /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
+  ['API key', /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/],
+  ['Stripe key', /\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}/],
+  ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
+  ['JWT', /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/],
+];
+
+// `password = "…"`, `API_KEY: …` and similar. The value must be at least 8
+// characters with a digit, and not an obvious placeholder or indirection.
+const ASSIGNMENT = /[\w.-]*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret)[\w.-]*["']?\s*[:=]\s*["']?([^\s"',;)}\]]{8,})/gi;
+const PLACEHOLDER = /^(?:<|\$|\*|%|\{|process\.env|os\.environ|env\.|getenv|redacted|example|changeme|placeholder|x{4,}|your[_-])/i;
+
+function luhn(digits) {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+function scanString(text) {
+  const kinds = [];
+  for (const [kind, re] of SENSITIVE_PATTERNS) if (re.test(text)) kinds.push(kind);
+  for (const m of text.matchAll(ASSIGNMENT)) {
+    if (/\d/.test(m[1]) && !PLACEHOLDER.test(m[1])) { kinds.push('password or secret assignment'); break; }
+  }
+  // Card numbers: 15 or 16 digits starting 3–6, optionally grouped, passing Luhn.
+  for (const m of text.matchAll(/\b[3-6]\d{3}(?:[ -]?\d{3,4}){3}\b/g)) {
+    const digits = m[0].replace(/\D/g, '');
+    if ((digits.length === 15 || digits.length === 16) && luhn(digits)) { kinds.push('card number'); break; }
+  }
+  return kinds;
+}
+
+/**
+ * Find values that look like credentials or card numbers anywhere in `value`.
+ * @returns {{ path: string, kind: string }[]} one entry per kind per location; never the matched text.
+ */
+export function findSensitive(value, path = '') {
+  const out = [];
+  const walk = (v, p) => {
+    if (typeof v === 'string') {
+      for (const kind of scanString(v)) out.push({ path: p || '(root)', kind });
+    } else if (Array.isArray(v)) {
+      v.forEach((x, i) => walk(x, `${p}[${i}]`));
+    } else if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) {
+        for (const kind of scanString(k)) out.push({ path: `${p ? p + '.' : ''}${k} (key)`, kind });
+        walk(x, p ? `${p}.${k}` : k);
+      }
+    }
+  };
+  walk(value, path);
+  return out;
+}
+
+function allowSensitive() {
+  return ['1', 'true', 'yes'].includes(String(process.env.JEV_ALLOW_SENSITIVE ?? '').toLowerCase());
+}
+
+function sensitiveError(findings) {
+  const list = findings.slice(0, 5).map((f) => `${f.kind} in ${f.path}`).join('; ');
+  const more = findings.length > 5 ? `; and ${findings.length - 5} more` : '';
+  const err = new JevError('sensitive', `Refused to send (sensitive): the request looks like it contains sensitive data (${list}${more}). Nothing was sent. Remove or mask these values, for example <redacted>, and call again, or decide yourself and mark it unverified. Do not set JEV_ALLOW_SENSITIVE yourself.`);
+  err.findings = findings;
+  return err;
 }
 
 // Guards -------------------------------------------------------------------------
@@ -440,7 +538,7 @@ Questions (repeatable; keys default to q1, q2, ... unless written as key=instruc
 
 Options:
   --verbose                 Print { answers, usage, requestId } instead of just answers
-  --no-retain               Ask the service not to retain the input (best effort)
+  --no-retain               Ask the gateway not to retain the input (best effort, not a privacy guarantee)
   --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
   --thresholds <high,low>   Decision thresholds for boolean answers (default ${DEFAULT_THRESHOLDS.high},${DEFAULT_THRESHOLDS.low},
                             env JEV_THRESHOLD_HIGH / JEV_THRESHOLD_LOW). Each boolean answer gets a
@@ -448,7 +546,11 @@ Options:
   --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_CONCURRENCY, JEV_COOLDOWN_MS, JEV_SESSION_ID (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_CONCURRENCY, JEV_COOLDOWN_MS, JEV_ALLOW_SENSITIVE, JEV_SESSION_ID (optional)
+
+Everything in state and questions is sent to a third party. Never include secrets, credentials,
+personal data or confidential material. Requests that look like they contain credentials or card
+numbers are refused before sending (error code sensitive).
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 

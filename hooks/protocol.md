@@ -19,9 +19,21 @@ Before you act on any decision that is not mechanically determined by the eviden
 
 A decision is "mechanically determined" only when the evidence, a command's output, or the user's words leave exactly one option. Everything else goes to Jev. The skill `jev` documents decomposition patterns (gate, verify, compare, rank, classify, grade, detect, attribute, narrow, self-check) and how to apply them per domain.
 
+## What never goes to Jev
+
+Everything you put in `state`, `instructions` or `criteria` is sent to a third party, which may keep it. This rule overrides the one above. Never send:
+
+- secrets: credentials, API keys, tokens, passwords, private keys, connection strings, `.env` contents
+- personal data: names tied to other details, contact details, addresses, identifiers, health, financial or account data
+- customer or user data, and anything the user has called confidential, private or internal
+
+If the evidence for a decision contains any of these, cut it down to the parts that do not, or replace the values with placeholders such as `<redacted>` and keep the structure. If the decision cannot be made without them, decide it yourself and mark it unverified. Never use Jev to find secrets or personal data: that means sending them. `--no-retain` is a best-effort request to the gateway, not a privacy guarantee.
+
+The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before anything is sent. Treat that as a signal that you broke this rule: mask the values and call again, or decide yourself. Never set `JEV_ALLOW_SENSITIVE`; only the user may. The check only catches obvious credentials, so passing it does not make a request safe.
+
 ## How
 
-1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, structured as an object such as `{ request, diff, testOutput }`.
+1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, structured as an object such as `{ request, diff, testOutput }`, after removing anything listed under "What never goes to Jev".
 2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
 3. Batch every question you have about the same evidence into one call. Do not write scripts that loop over or `Promise.all` many Jev calls: narrow the candidates first, then batch them into a few calls. The client caps concurrency and stops after a rate limit.
 4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.

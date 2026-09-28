@@ -659,6 +659,7 @@ overreaches  0.07  no</span>
     <details><summary>What do I need to run it?</summary><p>Node 18 and a Vercel AI Gateway key in <code>JEV_API_KEY</code>.</p></details>
     <details><summary>Can I change the 0.8 / 0.2 cut-offs?</summary><p>Yes. They are defaults. Set <code>JEV_THRESHOLD_HIGH</code> and <code>JEV_THRESHOLD_LOW</code> next to the API key, or pass <code>--thresholds 0.9,0.1</code> on one call. Every boolean answer then reports <code>yes</code>, <code>no</code>, or <code>undecided</code> against your numbers.</p></details>
     <details><summary>How big can the evidence be?</summary><p>Roughly 32k tokens of state. Trim to the relevant part. Jev cannot fetch, read, or run anything; if it is not in state, it is not considered.</p></details>
+    <details><summary>What data leaves my machine?</summary><p>Everything in a Jev request: the evidence and the questions go to Vercel AI Gateway and TypeSafe AI, who may keep it. The agent is told never to send secrets, credentials, personal or customer data, or anything you called confidential, and to mask or skip instead. The client also refuses to send anything that looks like a key, token, password or card number. <code>--no-retain</code> is best effort, not a guarantee. The call log stays local.</p></details>
     <details><summary>Is it free and open source?</summary><p>Yes. MIT licensed on GitHub. This client is unaffiliated with TypeSafe AI.</p></details>
   </div>
 </section>

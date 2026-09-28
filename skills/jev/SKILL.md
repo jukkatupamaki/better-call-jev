@@ -23,6 +23,12 @@ Every use of Jev is the same three moves.
 
 Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
 
+## What never goes into a request
+
+Everything in `state`, `instructions` and `criteria` is sent to a third party, which may keep it. Never include secrets (credentials, keys, tokens, passwords, `.env` contents), personal data, customer or user data, or anything the user called confidential. When the evidence contains them, send only the parts that do not, or replace the values with placeholders such as `<redacted>` and keep the structure. If the judgement needs the sensitive values themselves, make it without Jev and mark it unverified. `--no-retain` is best effort, not a privacy guarantee.
+
+The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before sending anything. The check is a backstop that catches obvious credentials only. Passing it does not make a request safe. Never set `JEV_ALLOW_SENSITIVE` yourself.
+
 ## Writing good questions
 
 This section and the next adapt the question-design guidance in TypeSafe's official skill ([typesafe-ai/skills](https://github.com/typesafe-ai/skills/blob/main/skills/typesafe-ai/SKILL.md), MIT) to Jev calls you make yourself.
@@ -61,7 +67,7 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 **Grade on a rubric.** `score` with the rubric rungs as criteria. State is `{ rubric, submission }`. Read `confidence` to see how peaked the distribution is; a low confidence with a middling score means the rubric or the submission is ambiguous.
 
-**Detect.** "Does this contain X?" as a boolean with criteria describing X. Use for secrets in a diff, PII in a record, an unanswered question in a thread, a contradiction between two statements, a hallucinated claim in a summary.
+**Detect.** "Does this contain X?" as a boolean with criteria describing X. Use for an unanswered question in a thread, a contradiction between two statements, a hallucinated claim in a summary, a breaking change in a diff. Never use it to look for secrets or personal data: that sends them to Jev. Use local tools such as a secret scanner for that.
 
 **Attribute cause.** State is `{ before, change, symptom }`. A `choice` over candidate causes, or a boolean "Was the symptom caused by the change?"
 
@@ -75,7 +81,7 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 **Text.** Draft meets the brief (verify). Tone fit (choice). Two passages contradict, or a summary adds unsupported claims (detect).
 
-**Data.** Record is a duplicate (detect). Category of a transaction or event (classify). Quality on a rubric (grade). Value plausible given neighbours (boolean).
+**Data.** Only for data with no personal or customer information in it. Record is a duplicate (detect). Category of a transaction or event (classify). Quality on a rubric (grade). Value plausible given neighbours (boolean).
 
 **Plans.** Requirement is testable, two requirements conflict (detect). Best approach under stated constraints (compare). Request is ambiguous: "would two reasonable people implement this differently in a way that matters" (gate).
 
@@ -136,11 +142,11 @@ Flags:
 - State, exactly one: `--state <text>`, `--state-file <path>` (a `.json` path is parsed as structured state), `--state-json <json>`. With none, stdin is the state text when question flags are present, otherwise a full request `{state, questions}`.
 - Questions, repeatable, keys default to `q1`, `q2` unless written `key=instructions`: `--bool "<q>"`, `--choice "<q>" --options "a=desc,b=desc"`, `--score "<q>" --scale "low,mid,high"`, `--questions <json>` to merge a raw object.
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
-- `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
+- `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the gateway not to retain the input; this is best effort, not a privacy guarantee.
 - `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
 - `--thresholds <high,low>` sets the decision thresholds for boolean answers (default `0.8,0.2`, or env `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`). The flag beats the env. Use it only when the user has asked for a different cut-off, for example a stricter gate on a destructive action.
 - `--provider <name>` selects the gateway (default `vercel`, or env `JEV_PROVIDER`). Only `vercel` exists today; an unknown name exits 1 with `bad_request` and lists the supported ones. Leave it unset unless the user asks for a specific gateway.
-- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
+- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `sensitive`, `unavailable`, `timeout`, `unknown`. `sensitive` means nothing was sent because the request looked like it contained credentials; mask them and retry, or decide yourself. `--help` prints everything.
 
 Answer shapes:
 

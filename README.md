@@ -21,6 +21,18 @@ Decision thresholds: every boolean answer from the CLI carries a `verdict` (`yes
 
 Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
 
+## Data handling
+
+Every Jev call sends its `state`, `instructions` and `criteria` to Vercel AI Gateway and TypeSafe AI. Treat anything in a request as shared with them and possibly kept: check their terms, which may give them rights to use what you send. `--no-retain` asks the gateway for zero data retention, but it is best effort and not a privacy guarantee.
+
+What the plugin does about it:
+
+- **Instructions.** The session protocol and the skill tell the agent never to send secrets, credentials, personal data, customer data, or anything you called confidential. The agent masks such values or decides without Jev. Jev is never to be used to scan for secrets or personal data.
+- **A client-side block.** Before sending, the client scans the whole request for private keys, common API key and token formats (AWS, GitHub, Slack, OpenAI and Anthropic style, Stripe, Google), JWTs, `password=`/`secret=` style assignments, and card numbers. On a match it sends nothing and fails with error code `sensitive`, naming the kind and location but not the value. This is a backstop for obvious credentials. It does not detect personal data or business secrets. `JEV_ALLOW_SENSITIVE=1` turns it off; agents are told never to set it.
+- **A local log only.** The call log (see `skills/jev-stats`) stays on your machine. Blocked requests are logged without their content. `JEV_LOG=meta` stops storing request state, `JEV_LOG=off` stops logging.
+
+The session protocol makes the agent use Jev for most decisions, which means a lot of your work passes through it. To keep only the skill and stop the automatic routing, remove the protocol's `SessionStart` entry from `hooks/hooks.json`.
+
 ## Install
 
 **As a plugin** (recommended):
@@ -95,5 +107,7 @@ Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketpl
 ## Website
 
 The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it.
+
+`site/llms-full.txt` is generated from this README, `skills/jev/SKILL.md` and `hooks/protocol.md`. After editing any of them, run `node tools/llms-full.mjs`; CI fails if it is out of date.
 
 The social card `site/og.png` is rendered from `tools/og.html`, which mirrors the hero. Edit the HTML and regenerate it with `node tools/og.mjs` (needs `playwright` and a Chromium; set `CHROMIUM` to reuse one you already have). Keep its terminal transcript in step with the hero animation.
