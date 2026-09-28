@@ -632,14 +632,14 @@
       <div class="code">
         <button class="copy" type="button" aria-label="Copy to clipboard">copy</button>
         <pre><span class="p">/jev</span> does this diff do what the issue asked, nothing more?
-<span class="c">satisfies    0.91  yes
-overreaches  0.07  no</span>
+<span class="c">satisfies yes .91
+overreaches no .07</span>
 
 <span class="p">/jev</span> which team owns this bug: billing, infra, or auth?
-<span class="c">infra        0.84</span>
+<span class="c">team infra .84 c=.72 | billing .12 auth .04</span>
 
 <span class="p">/jev</span> rate the risk of shipping this: cosmetic, low, moderate, high
-<span class="c">risk         moderate (2 / 3)</span></pre>
+<span class="c">risk 2/3 .58 c=.49 | 1:.3 3:.12</span></pre>
       </div>
       <p class="note">Claude gathers the evidence, writes the typed questions, calls Jev, and acts on the number. With the plugin installed it also does this on its own whenever it has to judge something.</p>
       <p class="note">Full reference, per-domain recipes, the raw CLI and module API: <a href="https://github.com/jukkatupamaki/better-call-jev/blob/main/skills/jev/SKILL.md">the skill file</a>. For machines: <a href="/llms.txt">/llms.txt</a>.</p>
@@ -658,6 +658,7 @@ overreaches  0.07  no</span>
     <details><summary>What does the plugin change about Claude Code?</summary><p>Every judgement call is routed through Jev: which option, whether an action is safe, whether a diff matches the request, whether a task is done. A SessionStart hook installs this. Remove it to keep only the skill.</p></details>
     <details><summary>What do I need to run it?</summary><p>Node 18 and a Vercel AI Gateway key in <code>JEV_API_KEY</code>.</p></details>
     <details><summary>Can I change the 0.8 / 0.2 cut-offs?</summary><p>Yes. They are defaults. Set <code>JEV_THRESHOLD_HIGH</code> and <code>JEV_THRESHOLD_LOW</code> next to the API key, or pass <code>--thresholds 0.9,0.1</code> on one call. Every boolean answer then reports <code>yes</code>, <code>no</code>, or <code>undecided</code> against your numbers.</p></details>
+    <details><summary>Why are the answers not JSON?</summary><p>Tokens. The CLI reads and prints a compact line format: <code>@field</code> lines for evidence, <code>?key bool</code> / <code>choice</code> / <code>score</code> lines for questions, and one answer line each, such as <code>safe yes .93</code> or <code>risk 2/3 .58 c=.49 | 1:.3</code>. It carries the same numbers as JSON at a fraction of the tokens. JSON still works in and out, with <code>--json</code>.</p></details>
     <details><summary>How big can the evidence be?</summary><p>Roughly 32k tokens of state. Trim to the relevant part. Jev cannot fetch, read, or run anything; if it is not in state, it is not considered.</p></details>
     <details><summary>What data leaves my machine?</summary><p>Everything in a Jev request: the evidence and the questions go to Vercel AI Gateway and TypeSafe AI, who may keep it. The agent is told never to send secrets, credentials, personal or customer data, or anything you called confidential, and to mask or skip instead. The client also refuses to send anything that looks like a key, token, password or card number. <code>--no-retain</code> is best effort, not a guarantee. The call log stays local.</p></details>
     <details><summary>Is it free and open source?</summary><p>Yes. MIT licensed on GitHub. This client is unaffiliated with TypeSafe AI.</p></details>
@@ -716,13 +717,7 @@ overreaches  0.07  no</span>
     '    <span class="s">for a refund?"</span>)'
   ].join('\n');
   const out = [
-    '  <span class="c">⎿</span>  {',
-    '       <span class="k">"refund"</span>: {',
-    '         <span class="k">"type"</span>: <span class="s">"boolean"</span>,',
-    '         <span class="k">"probability"</span>: <span class="n">0.31</span>,',
-    '         <span class="k">"verdict"</span>: <span class="s">"undecided"</span>',
-    '       }',
-    '     }'
+    '  <span class="c">⎿</span>  <span class="k">refund</span> <span class="s">undecided</span> <span class="n">.31</span>'
   ];
   const finalBar = `<div class="bar" id="bar"><div class="track"><div class="fill" id="fill"></div></div><span class="val" id="val">0.00</span><span class="lbl">P(refund) · undecided, 0.2–0.8 · 212 ms</span></div>`;
   const reply = `<span class="reply" id="reply">\n<span class="b">⏺</span> <span class="n">0.31</span>, undecided. Not acting on it as a\n  refund request — asking what they want.</span>`;

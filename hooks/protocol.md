@@ -33,11 +33,11 @@ The client refuses requests that look like they contain credentials or card numb
 
 ## How
 
-1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, structured as an object such as `{ request, diff, testOutput }`, after removing anything listed under "What never goes to Jev".
+1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, one `@field` per piece, such as `@request`, `@diff`, `@testOutput`, after removing anything listed under "What never goes to Jev".
 2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
 3. Batch every question you have about the same evidence into one call. Do not write scripts that loop over or `Promise.all` many Jev calls: narrow the candidates first, then batch them into a few calls. The client caps concurrency and stops after a rate limit.
-4. Call the script. Prefer the stdin JSON form. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
-5. Act on the answer. Every boolean answer carries a `verdict`: `yes`, `no`, or `undecided`, from thresholds that default to 0.8 / 0.2 and that the user can change with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`. Act on `yes` and `no`. On `undecided`, narrow the question or gather more evidence and ask again. For a choice, a clear leader decides; a close race is itself a finding to report to the user.
+4. Call the script with the compact request on stdin (`@field` evidence, `?key type instructions` questions). It answers one line per question. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
+5. Act on the answer. Each answer is one line starting with its key. A boolean line gives a verdict, `yes`, `no`, or `undecided`, then the probability (`safe yes .93`), from thresholds that default to 0.8 / 0.2 and that the user can change with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`. Act on `yes` and `no`. On `undecided`, narrow the question or gather more evidence and ask again. A choice or score line gives the pick, its probability, `c=` confidence, and the runners-up after `|`; scores are 0-based rungs written `rung/max`. The pick decides when it has at least twice the runner-up's probability; a closer race is itself a finding to report to the user.
 
 ## What Jev cannot do
 

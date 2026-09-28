@@ -519,8 +519,21 @@ export function verdict(probability, t) {
 // CLI ------------------------------------------------------------------------------
 
 const USAGE = `Usage:
-  jev.mjs [state] <question flags> [--verbose] [--no-retain]
-  echo '{"state": ..., "questions": {...}}' | jev.mjs        (full request on stdin)
+  jev.mjs [state] <question flags> [--verbose] [--no-retain] [--json]
+  jev.mjs < request.txt      (full request on stdin, compact format below, or JSON if it starts with "{")
+
+Compact request (stdin):
+  @field                    State field; its body is raw text up to the next @ or ? line.
+  ...                       Without @ lines, text before the first ? line is plain-text state.
+  ?key bool <instructions>  Optional indented criteria:  + <when true>  /  - <when false>
+  ?key choice <instr>       Indented options, one per line:  name: description
+  ?key score <instr>        Indented rungs, lowest first:  a | b | c  (or one per line)
+  A line starting @@ or ?? is a literal line starting @ or ?.
+
+Compact answers (stdout, one line per question):
+  key yes .91                       boolean: verdict, probability
+  key bug .72 c=.55 | feature .2 ...   choice: pick, its probability, confidence | the others
+  key 2/3 .81 c=.74 | 1:.15 ...       score: rung/max, its probability, confidence | the others
 
 State (give exactly one; if none, stdin is used):
   --state <text>            Inline text
@@ -537,7 +550,8 @@ Questions (repeatable; keys default to q1, q2, ... unless written as key=instruc
   Note: --options and --scale are comma-separated; commas inside a description are not supported.
 
 Options:
-  --verbose                 Print { answers, usage, requestId } instead of just answers
+  --json                    Print JSON answers instead of compact lines
+  --verbose                 Also print usage and requestId
   --no-retain               Ask the gateway not to retain the input (best effort, not a privacy guarantee)
   --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
   --thresholds <high,low>   Decision thresholds for boolean answers (default ${DEFAULT_THRESHOLDS.high},${DEFAULT_THRESHOLDS.low},
@@ -596,6 +610,7 @@ async function main(argv) {
   if (has('-h') || has('--help')) { console.log(USAGE); return; }
 
   const verbose = has('--verbose');
+  const json = has('--json');
   const retain = !has('--no-retain');
   const provider = next('--provider');
   const timeoutArg = next('--timeout');
@@ -652,7 +667,9 @@ async function main(argv) {
     const stdin = await readStdin();
     if (!stdin.trim()) throw new Error('No state given. See --help.');
     if (Object.keys(questions).length === 0) {
-      const req = JSON.parse(stdin);
+      const req = stdin.trimStart().startsWith('{')
+        ? JSON.parse(stdin)
+        : (await import('./compact.mjs')).parseCompact(stdin);
       state = req.state;
       Object.assign(questions, req.questions || {});
     } else {
@@ -666,7 +683,16 @@ async function main(argv) {
   for (const a of Object.values(result.answers)) {
     if (a.type === 'boolean') a.verdict = verdict(a.probability, t);
   }
-  console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
+  if (json) {
+    console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
+    return;
+  }
+  const { formatCompact } = await import('./compact.mjs');
+  console.log(formatCompact(result.answers));
+  if (verbose) {
+    const u = result.usage || {};
+    console.log(`# in=${u.inputTokens ?? '?'} out=${u.outputTokens ?? '?'} id=${result.requestId ?? '?'}`);
+  }
 }
 
 async function isCli() {

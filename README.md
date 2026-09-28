@@ -17,7 +17,7 @@ Set `JEV_API_KEY` in your environment. Never commit it. Options:
 - per project, gitignored: `.claude/settings.local.json` with `{ "env": { "JEV_API_KEY": "..." } }`
 - for the quick check below: a gitignored `.env` file (see `.env.example`)
 
-Decision thresholds: every boolean answer from the CLI carries a `verdict` (`yes`, `no`, `undecided`) computed from two cut-offs that default to 0.8 and 0.2. Move them for your own risk tolerance with `JEV_THRESHOLD_HIGH` and `JEV_THRESHOLD_LOW` in the same places as the key, or per call with `--thresholds 0.9,0.1`.
+Decision thresholds: every boolean answer from the CLI starts with a verdict (`yes`, `no`, `undecided`) computed from two cut-offs that default to 0.8 and 0.2. Move them for your own risk tolerance with `JEV_THRESHOLD_HIGH` and `JEV_THRESHOLD_LOW` in the same places as the key, or per call with `--thresholds 0.9,0.1`.
 
 Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
 
@@ -65,8 +65,37 @@ cp -r skills/jev /path/to/project/.claude/skills/jev
 ## Quick check
 
 ```bash
-env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --bool "Is the customer asking for a refund?"
+env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --bool "refund=Is the customer asking for a refund?"
 ```
+
+```
+refund undecided .31
+```
+
+## Request and answer format
+
+The CLI reads and prints a compact line format instead of JSON, because JSON spends an agent's tokens on quotes, braces, and repeated field names. Requests on stdin:
+
+```
+@ticket
+Card charged twice, please sort it out.
+?refund bool Is `ticket` asking for a refund?
+?team choice Which team owns `ticket`?
+ billing: charges, invoices, refunds
+ other: anything else
+?urgency score How urgent is `ticket`?
+ can wait | this week | today | now
+```
+
+Answers, one line per question:
+
+```
+refund undecided .55
+team billing .93 c=.87 | other .07
+urgency 2/3 .61 c=.52 | 1:.3 3:.09
+```
+
+`@key` starts a state field whose body runs to the next `@` or `?` line; lines of evidence starting with `@` or `?` are written doubled. Scores are 0-based rungs. Stdin starting with `{` is still read as a JSON request, and `--json` prints JSON answers. `skills/jev/SKILL.md` has the full reference.
 
 ## Tests
 
@@ -74,7 +103,7 @@ env $(cat .env) node skills/jev/scripts/jev.mjs --state "Card charged twice" --b
 node --test test/*.test.mjs
 ```
 
-No dependencies, no network, no key needed. The suite stubs `fetch` for transport and provider logic, runs a local HTTP server for timeout and CLI cases, and spawns the real script, including through a symlink, to cover entrypoint detection, argument parsing, stdin modes, output shape, and exit codes. The `test/` folder is not part of the shipped skill.
+No dependencies, no network, no key needed. The suite stubs `fetch` for transport and provider logic, runs a local HTTP server for timeout and CLI cases, and spawns the real script, including through a symlink, to cover entrypoint detection, argument parsing, stdin modes, the compact format, output shape, and exit codes. The `test/` folder is not part of the shipped skill.
 
 The live conformance check is separate and needs a real key:
 

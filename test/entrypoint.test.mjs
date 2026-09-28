@@ -40,7 +40,7 @@ test('symlinked script performs a real request end to end', async () => {
       env: { JEV_API_KEY: 'k', JEV_ENDPOINT: server.url },
     });
     assert.equal(r.code, 0, r.stderr);
-    assert.equal(r.json.ok.type, 'boolean');
+    assert.equal(r.stdout.trim(), 'ok yes .9');
   } finally {
     rmSync(dir, { recursive: true, force: true });
     await server.close();
