@@ -22,7 +22,7 @@
 // Answers, one line per question:
 //   satisfies yes .91
 //   kind bug .72 c=.55 | feature .20 other .08     c= is the answer's confidence
-//   quality 2/2 .81 c=.74 | 1:.15 0:.04
+//   quality 2/2 .81 c=.74 e=1.77 | 1:.15 0:.04    most likely rung; e= is the expected rung
 
 const TYPES = { bool: 'boolean', boolean: 'boolean', choice: 'choice', score: 'score' };
 const KEY = '[A-Za-z_][\\w.-]*';
@@ -145,6 +145,11 @@ function rest(entries, sep) {
   return others.length ? ' | ' + others.map(([k, p]) => `${k}${sep}${fmtP(p)}`).join(' ') : '';
 }
 
+/** Any number, two decimals at most: 2.44, 2.4, 2, .99. */
+export function fmtN(n) {
+  return String(Number(Number(n).toFixed(2))).replace(/^0\./, '.');
+}
+
 const conf = (a) => (a.confidence === undefined ? '' : ` c=${fmtP(a.confidence)}`);
 
 /** Format answers as one line per question. */
@@ -157,9 +162,11 @@ export function formatCompact(answers) {
       return `${key} ${a.choice} ${fmtP(p)}${conf(a)}${rest(probs.filter(([k]) => k !== a.choice), ' ')}`;
     }
     if (a.type === 'score') {
-      const max = probs.length ? probs.length - 1 : '?';
-      const p = a.probabilities?.[String(a.score)] ?? a.confidence;
-      return `${key} ${a.score}/${max} ${fmtP(p)}${conf(a)}${rest(probs.filter(([k]) => k !== String(a.score)), ':')}`;
+      // `score` is the expected rung (a float); the pick is the most likely rung.
+      if (!probs.length) return `${key} ${fmtN(a.score)}/?${conf(a)}`;
+      const [rung, p] = probs.reduce((best, e) => (e[1] > best[1] ? e : best));
+      const e = typeof a.score === 'number' ? ` e=${fmtN(a.score)}` : '';
+      return `${key} ${rung}/${probs.length - 1} ${fmtP(p)}${conf(a)}${e}${rest(probs.filter(([k]) => k !== rung), ':')}`;
     }
     return `${key} ${JSON.stringify(a)}`;
   }).join('\n');

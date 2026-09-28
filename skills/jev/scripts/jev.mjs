@@ -16,7 +16,7 @@
 // where Answer is one of
 //   { type: 'boolean', probability }
 //   { type: 'choice',  choice, probabilities, confidence }
-//   { type: 'score',   score, probabilities, confidence }
+//   { type: 'score',   score, probabilities, confidence }   score is the expected rung (a float)
 //
 // Provider contract (see README "Adding a gateway"):
 //   label            Human name, used in error messages.
@@ -476,7 +476,7 @@ export async function choose(state, instructions, options) {
   return r.answers.q;
 }
 
-/** Score question → { score, probabilities, confidence }. `scale` is ordered lowest → highest. */
+/** Score question → { score, probabilities, confidence }; score is the expected rung.  `scale` is ordered lowest → highest. */
 export async function score(state, instructions, scale) {
   const r = await evaluate({ state, questions: { q: { type: 'score', instructions, criteria: scale } } });
   return r.answers.q;
@@ -533,7 +533,8 @@ Compact request (stdin):
 Compact answers (stdout, one line per question):
   key yes .91                       boolean: verdict, probability
   key bug .72 c=.55 | feature .2 ...   choice: pick, its probability, confidence | the others
-  key 2/3 .81 c=.74 | 1:.15 ...       score: rung/max, its probability, confidence | the others
+  key 2/3 .81 c=.74 e=1.9 | 1:.15 ...  score: likeliest rung/max, its probability, confidence,
+                                    e= expected rung | the others
 
 State (give exactly one; if none, stdin is used):
   --state <text>            Inline text

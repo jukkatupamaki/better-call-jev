@@ -109,7 +109,14 @@ function answerText(r, t) {
   return Object.entries(r.answers).map(([k, a]) => {
     if (a.type === 'boolean') return `${k}=${a.probability?.toFixed(2)} ${verdict(a.probability, t)}`;
     if (a.type === 'choice') return `${k}=${a.choice}(${(a.probabilities?.[a.choice] ?? a.confidence ?? 0).toFixed(2)})`;
-    if (a.type === 'score') return `${k}=${typeof a.score === 'number' ? +a.score.toFixed(1) : a.score}/${Object.keys(a.probabilities ?? {}).length - 1}`;
+    if (a.type === 'score') {
+      // score is the expected rung; show the likeliest rung and keep the expectation beside it.
+      const probs = Object.entries(a.probabilities ?? {});
+      const e = typeof a.score === 'number' ? +a.score.toFixed(1) : a.score;
+      if (!probs.length) return `${k}=e${e}`;
+      const [rung, p] = probs.reduce((best, x) => (x[1] > best[1] ? x : best));
+      return `${k}=${rung}/${probs.length - 1}(${p.toFixed(2)} e${e})`;
+    }
     return `${k}=?`;
   }).join(' · ');
 }

@@ -7,9 +7,9 @@ Better Call Jev (package name `better-call-jev`, v0.2.0, MIT) is a judgement pri
 Three answer shapes:
 - `boolean`: a yes/no with stated truth conditions. Returns `probability` from 0 to 1.
 - `choice`: one of a small named set you describe. Returns `choice`, `probabilities` and `confidence`.
-- `score`: a position on a rubric labelled rung by rung. Returns `score` (0-based rung index), `probabilities` and `confidence`.
+- `score`: a position on a rubric labelled rung by rung. Returns `score` (the expected rung, a float from 0 to the top rung), `probabilities` keyed by rung index and `confidence`.
 
-Format: the CLI reads a compact line request on stdin (`@field` lines for evidence, `?key bool|choice|score instructions` for questions, indented criteria) and prints one line per answer: `safe yes .93`, `team billing .71 c=.64 | infra .22`, `risk 2/3 .58 c=.49 | 1:.3`. JSON in and out still works (`{` on stdin, `--json`).
+Format: the CLI reads a compact line request on stdin (`@field` lines for evidence, `?key bool|choice|score instructions` for questions, indented criteria) and prints one line per answer: `safe yes .93`, `team billing .71 c=.64 | infra .22`, `risk 2/3 .58 c=.49 e=1.82 | 1:.3 3:.12` (likeliest rung/max, `e=` expected rung). JSON in and out still works (`{` on stdin, `--json`).
 
 Thresholds: a boolean at or above 0.8 or at or below 0.2 is decided. In between, split the question or add evidence. A choice or score is decided when its pick has at least twice the runner-up's probability.
 

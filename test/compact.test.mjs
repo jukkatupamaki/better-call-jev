@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { ROOT, runCli, startServer, vercelBody } from './helpers.mjs';
 
-const { parseCompact, formatCompact, fmtP } = await import(join(ROOT, 'skills', 'jev', 'scripts', 'compact.mjs'));
+const { parseCompact, formatCompact, fmtP, fmtN } = await import(join(ROOT, 'skills', 'jev', 'scripts', 'compact.mjs'));
 
 const FULL = `@spec
 Add a --dry-run flag.
@@ -64,6 +64,10 @@ test('parse errors are specific', () => {
   for (const [input, re] of cases) assert.throws(() => parseCompact(input), re, input);
 });
 
+test('fmtN keeps the integer part', () => {
+  assert.deepEqual([2.44, 2.4, 2, 0.99, 0, 1.005].map(fmtN), ['2.44', '2.4', '2', '.99', '0', '1']);
+});
+
 test('fmtP is short', () => {
   assert.deepEqual([0.91, 0.9, 0.07, 1, 0, 0.999, 0.001].map(fmtP), ['.91', '.9', '.07', '1', '0', '1', '0']);
 });
@@ -72,13 +76,16 @@ test('formats one line per answer, runners-up sorted, negligible ones dropped', 
   const out = formatCompact({
     ok: { type: 'boolean', probability: 0.91, verdict: 'yes' },
     kind: { type: 'choice', choice: 'bug', probabilities: { other: 0.08, bug: 0.72, feature: 0.2, x: 0.001 }, confidence: 0.6 },
-    q: { type: 'score', score: 3, probabilities: { 0: 0.01, 1: 0.03, 2: 0.15, 3: 0.81 }, confidence: 0.7 },
+    q: { type: 'score', score: 2.76, probabilities: { 0: 0.01, 1: 0.03, 2: 0.15, 3: 0.81 }, confidence: 0.7 },
+    // Real gateway answer: score is the expected rung, not the pick.
+    risk: { type: 'score', score: 0.99, probabilities: { 0: 0.07, 1: 0.88, 2: 0.05, 3: 0 }, confidence: 0.88 },
     sure: { type: 'choice', choice: 'a', probabilities: { a: 1, b: 0 }, confidence: 1 },
   });
   assert.equal(out, [
     'ok yes .91',
     'kind bug .72 c=.6 | feature .2 other .08',
-    'q 3/3 .81 c=.7 | 2:.15 1:.03 0:.01',
+    'q 3/3 .81 c=.7 e=2.76 | 2:.15 1:.03 0:.01',
+    'risk 1/3 .88 c=.88 e=.99 | 0:.07 2:.05',
     'sure a 1 c=1',
   ].join('\n'));
 });
@@ -97,7 +104,7 @@ test('CLI: compact request on stdin, compact answers on stdout', async () => {
   const body = server.requests.at(-1).body;
   assert.equal(body.state.spec, 'Add a --dry-run flag.');
   assert.deepEqual(Object.keys(body.questions), ['satisfies', 'over', 'kind', 'quality']);
-  assert.equal(r.stdout, 'satisfies yes .9\nover yes .9\nkind bug 1 c=1\nquality 1/3 1 c=1\n');
+  assert.equal(r.stdout, 'satisfies yes .9\nover yes .9\nkind bug 1 c=1\nquality 1/3 1 c=1 e=1\n');
 });
 
 test('CLI: --verbose adds a usage line; --json keeps the JSON form', async () => {

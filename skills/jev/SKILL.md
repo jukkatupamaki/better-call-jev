@@ -47,10 +47,11 @@ The CLI prints one line per question, in the order asked, each starting with the
 ```
 safe yes .93                              boolean: verdict, probability of true
 team billing .71 c=.64 | infra .22 other .07   choice: pick, its probability, confidence | the other options
-risk 2/3 .58 c=.49 | 1:.3 3:.12             score: rung/max, its probability, confidence | other rungs as rung:p
+risk 2/3 .58 c=.49 e=1.82 | 1:.3 3:.12     score: likeliest rung/max, its probability, confidence, expected rung | other rungs as rung:p
 ```
 
-- The score is a 0-based index into the rungs you listed, lowest first. `2/3` is the third of four rungs; `0/3` the lowest, `3/3` the highest.
+- Rungs are numbered from 0 in the order you listed them, lowest first. `2/3` means the likeliest rung is the third of four; `0/3` is the lowest, `3/3` the highest.
+- `e=` is the expected rung, the probability-weighted average from 0 to max (the `score` field in JSON). It is not a rung: `e=.99` with `1/3 .88` means rung 1 with a little weight either side. Use the likeliest rung to act on a single answer and `e=` to compare or sort answers.
 - The runners-up after `|` are sorted by probability. Options below 0.005 are left out; a line with no `|` means the pick took essentially all the probability.
 - Numbers are rounded to two decimals with the leading zero dropped: `.07` is 0.07, `1` is certainty.
 - A line whose answer is a JSON object is an answer type the formatter does not know. Read it as JSON.
@@ -63,7 +64,7 @@ risk 2/3 .58 c=.49 | 1:.3 3:.12             score: rung/max, its probability, co
 - **A typed answer is well formed, not necessarily true.** When a wrong answer is costly, check a few cases where you already know the outcome, and escalate undecided cases to the user rather than forcing them.
 - **When an answer looks wrong, find out which part failed:** missing evidence, a badly worded question, the model, or your own logic. Fix that part; do not just ask the same question again.
 
-Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage under 2 means expand; otherwise ship.
+Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage with `e=` under 2 means expand; otherwise ship.
 
 ## Decomposition patterns
 
@@ -75,7 +76,7 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 **Compare two.** State is `{ a, b, goal }`. Ask a `choice` between `a` and `b` with the goal as instructions, or a `boolean` "Is a better than b for the goal?" Prefer the choice; its probabilities tell you how close the race is.
 
-**Rank many.** One `score` question per item, all with the same rubric, batched into one call with the items in `state` under their keys. Then sort by the rung, the number before the `/`. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
+**Rank many.** One `score` question per item, all with the same rubric, batched into one call with the items in `state` under their keys. Then sort by `e=`, the expected rung, which breaks ties that the likeliest rung cannot. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
 
 **Classify.** One `choice` with a category per option and an `other`. For multi-label, one `boolean` per label instead.
 
@@ -157,10 +158,10 @@ The answer is one line per question:
 satisfies yes .91
 overreaches no .07
 kind bug .72 c=.55 | feature .2 other .08
-quality 3/3 .81 c=.74 | 2:.15 1:.03
+quality 3/3 .81 c=.74 e=2.76 | 2:.15 1:.03
 ```
 
-A boolean gives its verdict and probability. A choice gives the pick, its probability and `c=` its confidence, then the other options. A score gives rung/max, that rung's probability and `c=` its confidence, then the other rungs as `rung:p`. Options below 0.005 are left out. `--json` prints the full JSON answers instead.
+A boolean gives its verdict and probability. A choice gives the pick, its probability and `c=` its confidence, then the other options. A score gives the likeliest rung over the top rung (`rung/max`), that rung's probability, `c=` its confidence and `e=` the expected rung, then the other rungs as `rung:p`. Options below 0.005 are left out. `--json` prints the full JSON answers instead.
 
 Pipe evidence in when the question is simple:
 
@@ -186,7 +187,7 @@ Answer shapes:
 |---|---|---|---|
 | `boolean` | `?key bool …`, optional ` + true` / ` - false` lines | `key <verdict> <p>` | `probability` 0..1, and from the CLI `verdict`: `yes` / `no` / `undecided` |
 | `choice` | `?key choice …`, ` name: description` lines | `key <pick> <p> c=<conf> \| <name> <p> …` | `choice`, `probabilities`, `confidence` |
-| `score` | `?key score …`, rungs lowest first | `key <rung>/<max> <p> c=<conf> \| <rung>:<p> …` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
+| `score` | `?key score …`, rungs lowest first | `key <rung>/<max> <p> c=<conf> e=<expected> \| <rung>:<p> …` | `score` = expected rung 0..n-1 (a float), `probabilities` keyed `"0".."n-1"`, `confidence` |
 
 The CLI prints compact lines by default; `--json` gives the JSON shapes. Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the protocol (batch per evidence, no retries, stop after repeated failures) applies unchanged.
 
@@ -198,7 +199,7 @@ As a module from Node code:
 import { evaluate, ask, choose, score, verdict, thresholds, JevError } from './scripts/jev.mjs';
 await ask(state, instructions, criteria?);                // number
 await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
-await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
+await score(state, instructions, [low, ..., high]);       // { score (expected rung), probabilities, confidence }
 await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answers, usage, requestId }
 verdict(probability, thresholds?);                         // 'yes' | 'no' | 'undecided' under the defaults or env
 thresholds({ high?, low? });                               // resolved { high, low }, validated

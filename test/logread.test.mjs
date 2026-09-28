@@ -132,7 +132,7 @@ test('show collapses repeated criteria and clips long values with --max', async 
   const r = await run(['show', 'eeee', '--max', '50'], dir);
   assert.match(r.stdout, /criteria \["low","mid","high"\]/);
   assert.match(r.stdout, /criteria same as above/);
-  assert.match(r.stdout, /→ 1\.2\/2/);
+  assert.match(r.stdout, /→ 1\/2\(0\.60 e1\.2\)/);
   assert.match(r.stdout, /y{49}…/);
   assert.ok(!r.stdout.includes('y'.repeat(60)));
 });
