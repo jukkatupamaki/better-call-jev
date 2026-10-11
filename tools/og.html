@@ -6,112 +6,100 @@
 <!--
   Source for site/og.png (1200×630). Render it with:
     node tools/og.mjs
-  Keep the terminal transcript in step with the hero animation in site/index.html.
+  Keep the headline and the answer line in step with the hero in site/index.html.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@800&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wdth,wght@6..144,25..151,1..1000&family=Hanken+Grotesk:wght@400;600&family=Spline+Sans+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0d0d;
-    --bg-2: #101415;
-    --fg: #e6ebea;
-    --muted: #8f9a99;
-    --dim: #55605f;
-    --line: #1d2425;
-    --line-2: #293233;
-    --amber: #0f8b8d;
-    --amber-2: #22a7a9;
-    --amber-soft: rgba(34, 167, 169, .14);
-    --green: #8fd694;
-    --dot: rgba(230, 235, 234, .07);
-    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --paper: #fdfdfc;
+    --plane: #d9d8d4;
+    --mid: #ababa6;
+    --ink-2: #716b62;
+    --ink: #272821;
+    --signal: #c03d24;
+    --f-display: "Google Sans Flex", "Hanken Grotesk", sans-serif;
+    --f-text: "Hanken Grotesk", sans-serif;
+    --f-mono: "Spline Sans Mono", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; width: 1200px; height: 630px; overflow: hidden;
-    background: var(--bg); color: var(--fg);
-    font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
+    background: var(--paper); color: var(--ink); font-family: var(--f-text);
   }
-  .card {
-    position: relative; width: 1200px; height: 630px;
-    display: grid; grid-template-columns: 1fr 480px; align-items: center; gap: 48px;
-    padding: 0 72px;
-  }
-  .card::before {
-    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-    background-size: 24px 24px;
-    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 100%);
-  }
-  .card > * { position: relative; z-index: 1; min-width: 0; }
-
-  .eyebrow {
-    display: inline-block; font-family: var(--mono); font-size: 15px; font-weight: 500;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
-    border: 1px solid var(--line-2); border-radius: 999px; padding: 7px 16px;
+  .card { width: 1200px; height: 630px; padding: 56px 64px 0; position: relative; }
+  .label {
+    font-family: var(--f-display); font-variation-settings: "wght" 500, "wdth" 112.5;
+    font-size: 17px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2);
   }
   h1 {
-    font-family: "Geist", Inter, sans-serif; font-weight: 800; letter-spacing: -.055em;
-    font-size: 96px; line-height: .9; margin: 30px 0 26px;
+    font-family: var(--f-display); font-variation-settings: "wght" 600, "wdth" 75; font-weight: 600;
+    font-size: 80px; line-height: 1.02; letter-spacing: -.01em; margin: 18px 0 0;
   }
-  h1 em { font-style: normal; color: var(--amber-2); }
-  .lede { font-size: 23px; line-height: 1.45; color: var(--muted); margin: 0; max-width: 520px; }
-  .lede b { color: var(--fg); font-weight: 500; }
-  .domain {
-    position: absolute; left: 72px; bottom: 54px; z-index: 1;
-    font-family: var(--mono); font-size: 16px; color: var(--dim);
+  .row {
+    position: absolute; left: 64px; right: 64px; top: 390px;
+    display: grid; grid-template-columns: 1.15fr 1fr; gap: 0 56px;
   }
-
-  .term {
-    font-family: var(--mono); font-size: 15px; line-height: 1.7;
-    background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 14px;
-    box-shadow: 0 30px 80px -30px rgba(0,0,0,.85); overflow: hidden; position: relative;
+  .cap {
+    font-family: var(--f-display); font-variation-settings: "wght" 500, "wdth" 112.5;
+    font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2);
+    padding-bottom: 10px; border-bottom: 1px solid var(--ink); margin-bottom: 18px;
   }
-  .term::after {
-    content: ""; position: absolute; inset: -1px; border-radius: 14px; pointer-events: none;
-    background: linear-gradient(135deg, var(--amber-soft), transparent 40%); opacity: .9;
+  .para .cap { border-bottom-color: var(--mid); }
+  .answer { font-family: var(--f-mono); font-size: 38px; line-height: 1.2; letter-spacing: -.01em; white-space: nowrap; }
+  .sig { color: var(--signal); }
+  .act { margin-top: 12px; font-size: 21px; line-height: 1.3; }
+  .act::before { content: "→ "; color: var(--ink-2); }
+  .bars i {
+    display: block; height: 11px; margin-bottom: 13px;
+    background-size: 610px 100%;
+    background-image: linear-gradient(90deg,
+      var(--plane) 0 38px, transparent 38px 44px,
+      var(--plane) 44px 66px, transparent 66px 72px,
+      var(--plane) 72px 133px, transparent 133px 139px,
+      var(--plane) 139px 156px, transparent 156px 162px,
+      var(--plane) 162px 206px, transparent 206px 212px,
+      var(--plane) 212px 241px, transparent 241px 247px,
+      var(--plane) 247px 317px, transparent 317px 323px,
+      var(--plane) 323px 348px, transparent 348px 354px,
+      var(--plane) 354px 387px, transparent 387px 393px,
+      var(--plane) 393px 445px, transparent 445px 451px,
+      var(--plane) 451px 470px, transparent 470px 476px,
+      var(--plane) 476px 517px, transparent 517px 523px,
+      var(--plane) 523px 550px, transparent 550px 556px,
+      var(--plane) 556px 604px, transparent 604px 610px);
   }
-  .term-bar { display: flex; align-items: center; gap: 7px; padding: 13px 18px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 14px; }
-  .term-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line-2); }
-  .term-bar span { margin-left: auto; }
-  .term-body { padding: 20px 22px 22px; white-space: pre; }
-  .p { color: var(--amber); }
-  .c { color: var(--muted); }
-  .s { color: var(--green); }
-  .k { color: var(--fg); }
-  .n { color: var(--amber-2); font-weight: 700; }
-  .b { color: var(--amber-2); }
-  .t { color: var(--fg); font-weight: 700; }
-
-  .bar { margin-top: 16px; display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; }
-  .bar .track { height: 9px; background: var(--line); border-radius: 999px; overflow: hidden; }
-  .bar .fill { height: 100%; width: 31%; background: linear-gradient(90deg, var(--amber), var(--amber-2)); border-radius: 999px; }
-  .bar .val { color: var(--amber-2); font-weight: 700; font-variant-numeric: tabular-nums; }
-  .bar .lbl { grid-column: 1 / -1; color: var(--dim); font-size: 13.5px; margin-top: -2px; }
+  .bars i:nth-child(2) { background-position-x: -247px; width: 96%; }
+  .bars i:nth-child(3) { background-position-x: -451px; width: 99%; }
+  .bars i:nth-child(4) { background-position-x: -72px; width: 58%; }
+  .foot {
+    position: absolute; left: 64px; right: 64px; bottom: 0; height: 64px;
+    border-top: 3px solid var(--ink); display: flex; justify-content: space-between; align-items: center;
+    font-size: 19px;
+  }
+  .foot b { font-family: var(--f-display); font-variation-settings: "wght" 600, "wdth" 75; font-weight: 600; font-size: 22px; }
+  .foot span { color: var(--ink-2); }
 </style>
 </head>
 <body>
 <div class="card">
-  <div>
-    <span class="eyebrow">Claude Code plugin</span>
-    <h1>Better Call<br><em>Jev.</em></h1>
-    <p class="lede">Give Jev the evidence and a bounded question. Get back <b>a calibrated probability</b>, not a paragraph.</p>
+  <p class="label" style="margin:0">Claude Code plugin</p>
+  <h1>Give Jev the evidence<br>and a bounded question.<br>Act on the number.</h1>
+
+  <div class="row">
+    <div>
+      <p class="cap" style="margin-top:0">A calibrated probability</p>
+      <p class="answer" style="margin:0">refund undecided <span class="sig">.31</span></p>
+      <p class="act" style="margin-bottom:0">Not acting on it as a refund request — asking what they want.</p>
+    </div>
+    <div class="para">
+      <p class="cap" style="margin-top:0">instead of a paragraph</p>
+      <div class="bars"><i></i><i></i><i></i><i></i></div>
+    </div>
   </div>
 
-  <div class="term">
-    <div class="term-bar"><i></i><i></i><i></i><span>claude code · /jev</span></div>
-    <div class="term-body"><span class="c">&gt; </span><span class="p">/jev</span> is the customer asking for a refund?
-
-<span class="b">⏺</span> <span class="t">Bash</span>(node jev.mjs --state-file ticket.md
-    --bool <span class="s">"refund=Is the customer asking</span>
-    <span class="s">for a refund?"</span>)
-  <span class="c">⎿</span>  <span class="k">refund</span> <span class="s">undecided</span> <span class="n">.31</span><div class="bar"><div class="track"><div class="fill"></div></div><span class="val">0.31</span><span class="lbl">P(refund) · undecided, 0.2–0.8 · 212 ms</span></div></div>
-  </div>
-
-  <span class="domain">bettercalljev.com</span>
+  <div class="foot"><b>Better Call Jev</b><span>bettercalljev.com</span></div>
 </div>
 </body>
 </html>
