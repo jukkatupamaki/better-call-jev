@@ -40,7 +40,7 @@ test('symlinked script performs a real request end to end', async () => {
       env: { JEV_API_KEY: 'k', JEV_ENDPOINT: server.url },
     });
     assert.equal(r.code, 0, r.stderr);
-    assert.equal(r.json.ok.type, 'boolean');
+    assert.equal(r.stdout.trim(), 'ok yes .9');
   } finally {
     rmSync(dir, { recursive: true, force: true });
     await server.close();
@@ -61,6 +61,6 @@ test('importing as a module does not run the CLI or read stdin', async () => {
     child.stdin.end();
   });
   assert.equal(out.code, 0, out.stderr);
-  assert.deepEqual(JSON.parse(out.stdout), ['JevError', 'ask', 'choose', 'evaluate', 'listProviders', 'score', 'thresholds', 'verdict']);
+  assert.deepEqual(JSON.parse(out.stdout), ['JevError', 'ask', 'choose', 'evaluate', 'findSensitive', 'listProviders', 'logDir', 'logFileName', 'logLevel', 'score', 'thresholds', 'verdict']);
   assert.equal(out.stderr, '');
 });

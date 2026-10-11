@@ -35,6 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check site/llms-full.txt matches its sources
+        run: node tools/llms-full.mjs --check
       - name: Check manifests are valid JSON with matching versions
         run: |
           node -e '
@@ -47,6 +52,5 @@ jobs:
             if (m.plugins[0].name !== p.name) throw new Error("plugin name mismatch between manifests");
             if (!h.hooks?.SessionStart) throw new Error("hooks.json missing SessionStart");
             if (!fs.existsSync("skills/jev/SKILL.md")) throw new Error("skills/jev/SKILL.md missing");
-            if (!fs.existsSync("hooks/protocol.md")) throw new Error("hooks/protocol.md missing");
             console.log(`ok: ${p.name}@${p.version}`);
           '

@@ -16,7 +16,7 @@
 // where Answer is one of
 //   { type: 'boolean', probability }
 //   { type: 'choice',  choice, probabilities, confidence }
-//   { type: 'score',   score, probabilities, confidence }
+//   { type: 'score',   score, probabilities, confidence }   score is the expected rung (a float)
 //
 // Provider contract (see README "Adding a gateway"):
 //   label            Human name, used in error messages.
@@ -148,7 +148,10 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
   if (!res.ok || upstreamError) {
     const upstream = upstreamError || data?.message || text;
     const code = res.ok ? 'unknown' : classify(res.status);
-    throw new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
+    const err = new JevError(code, `Jev request failed (${code}): ${upstream}`, { status: res.status, cause: data ?? text });
+    const retryAfter = res.headers.get('retry-after');
+    if (retryAfter != null) err.retryAfter = retryAfter;
+    throw err;
   }
 
   const result = provider.parseResponse(data, res);
@@ -158,10 +161,109 @@ async function transport({ state, questions, retain, timeoutMs, provider: provid
   return result;
 }
 
+// Local call log ----------------------------------------------------------------
+//
+// Every evaluate() call appends one JSON line to a local file. Nothing leaves the
+// machine. Logging must never slow down or break a call: it runs after the
+// response, is a single synchronous append, and swallows every error.
+//
+//   JEV_LOG      full (default) | meta (no state, only its hash and size) | off
+//
+// Read the log with scripts/log.mjs (summary, list, show, sessions), not directly:
+// it prints compact text instead of raw JSON.
+//   JEV_LOG_DIR  Directory for the log. Defaults to $CLAUDE_PLUGIN_DATA/logs,
+//                then $XDG_STATE_HOME/better-call-jev, then ~/.local/state/better-call-jev.
+//
+// Files are monthly (calls-YYYY-MM.jsonl, UTC), created 0600 in a 0700 dir.
+// `retain: false` downgrades full to meta: the caller asked for the state not to be kept.
+
+const LOG_SCHEMA_VERSION = 1;
+const LOG_LEVELS = ['full', 'meta', 'off'];
+
+export function logLevel() {
+  const v = (process.env.JEV_LOG || 'full').toLowerCase();
+  if (v === '0' || v === 'false' || v === 'no') return 'off';
+  return LOG_LEVELS.includes(v) ? v : 'full';
+}
+
+export async function logDir() {
+  const { join } = await import('node:path');
+  if (process.env.JEV_LOG_DIR) return process.env.JEV_LOG_DIR;
+  if (process.env.CLAUDE_PLUGIN_DATA) return join(process.env.CLAUDE_PLUGIN_DATA, 'logs');
+  if (process.env.XDG_STATE_HOME) return join(process.env.XDG_STATE_HOME, 'better-call-jev');
+  const { homedir } = await import('node:os');
+  return join(homedir(), '.local', 'state', 'better-call-jev');
+}
+
+export function logFileName(date) {
+  return `calls-${date.toISOString().slice(0, 7)}.jsonl`;
+}
+
+async function writeLog(record) {
+  try {
+    const { mkdirSync, appendFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = await logDir();
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const line = JSON.stringify(record) + '\n';
+    appendFileSync(join(dir, logFileName(new Date(record.ts))), line, { mode: 0o600 });
+  } catch {
+    // Logging is best effort by design.
+  }
+}
+
+async function logCall({ id, startedAt, t0, state, questions, retain, provider, caller, result, error }) {
+  let level = logLevel();
+  if (level === 'off') return;
+  if (retain === false && level === 'full') level = 'meta';
+  // Calls the guard refused never reached the service. A burst can produce
+  // hundreds of them, so they get a minimal record that is only worth counting.
+  if (error?.refused) {
+    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'refused' });
+    return;
+  }
+  // Blocked for sensitive data: never write the request, not even locally.
+  if (error?.code === 'sensitive') {
+    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'sensitive', findings: error.findings });
+    return;
+  }
+  try {
+    const { createHash } = await import('node:crypto');
+    const stateText = typeof state === 'string' ? state : JSON.stringify(state) ?? '';
+    const record = {
+      v: LOG_SCHEMA_VERSION,
+      id,
+      ts: startedAt.toISOString(),
+      endTs: new Date().toISOString(),
+      latencyMs: Math.round((performance.now() - t0) * 10) / 10,
+      session: process.env.JEV_SESSION_ID || null,
+      caller,
+      provider: provider || process.env.JEV_PROVIDER || DEFAULT_PROVIDER,
+      level,
+      retain,
+      status: error ? error.code || 'unknown' : 'ok',
+      http: error?.status ?? null,
+      requestId: result?.requestId ?? null,
+      usage: result?.usage ?? null,
+      stateHash: 'sha256:' + createHash('sha256').update(stateText).digest('hex'),
+      stateBytes: Buffer.byteLength(stateText),
+      stateType: Array.isArray(state) ? 'array' : typeof state,
+      stateKeys: state && typeof state === 'object' && !Array.isArray(state) ? Object.keys(state) : null,
+      questions,
+      answers: result?.answers ?? null,
+      error: error ? error.message : null,
+    };
+    if (level === 'full') record.state = state;
+    await writeLog(record);
+  } catch {
+    // Never let logging affect the call.
+  }
+}
+
 // Public API ---------------------------------------------------------------------
 
 export class JevError extends Error {
-  /** @param {'auth'|'bad_request'|'rate_limited'|'unavailable'|'timeout'|'unknown'} code */
+  /** @param {'auth'|'bad_request'|'rate_limited'|'sensitive'|'unavailable'|'timeout'|'unknown'} code */
   constructor(code, message, { status, cause } = {}) {
     super(message, cause !== undefined ? { cause } : undefined);
     this.name = 'JevError';
@@ -189,13 +291,176 @@ export class JevError extends Error {
  *         | { type: 'choice',  choice: string, probabilities: Record<string, number>, confidence: number }
  *         | { type: 'score',   score: number,  probabilities: Record<string, number>, confidence: number }} Answer
  */
-export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS, provider }) {
+export async function evaluate({ state, questions, retain = true, timeoutMs = DEFAULT_TIMEOUT_MS, provider, caller = 'module' }) {
   if (state === undefined) throw new JevError('bad_request', '`state` is required.');
   if (!questions || Object.keys(questions).length === 0) {
     throw new JevError('bad_request', 'At least one question is required.');
   }
-  return transport({ state, questions, retain, timeoutMs, provider });
+  const { randomUUID } = await import('node:crypto');
+  const ctx = { id: randomUUID(), startedAt: new Date(), t0: performance.now(), state, questions, retain, provider, caller };
+  if (!allowSensitive()) {
+    const findings = findSensitive({ state, questions });
+    if (findings.length) {
+      const error = sensitiveError(findings);
+      await logCall({ ...ctx, error });
+      throw error;
+    }
+  }
+  let result;
+  try {
+    result = await guarded(() => transport({ state, questions, retain, timeoutMs, provider }));
+  } catch (error) {
+    await logCall({ ...ctx, error });
+    throw error;
+  }
+  await logCall({ ...ctx, result });
+  return result;
 }
+
+// Sensitive data -------------------------------------------------------------------
+//
+// Everything in a request leaves the machine and goes to a third party. Before
+// sending, scan every string in `state` and `questions` for values that look like
+// credentials or card numbers, and refuse the call if any are found. This is a
+// backstop for obvious secrets, not a PII detector: names, addresses and business
+// secrets pass straight through, so the rule for callers remains "never put them
+// in state". The error and the log name the kind and location of each match,
+// never the matched text. JEV_ALLOW_SENSITIVE=1 disables the check; only the user
+// should ever set it.
+
+const SENSITIVE_PATTERNS = [
+  ['private key', /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/],
+  ['AWS access key', /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/],
+  ['GitHub token', /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})\b/],
+  ['Slack token', /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
+  ['API key', /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/],
+  ['Stripe key', /\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}/],
+  ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
+  ['JWT', /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/],
+];
+
+// `password = "…"`, `API_KEY: …` and similar. The value must be at least 8
+// characters with a digit, and not an obvious placeholder or indirection.
+const ASSIGNMENT = /[\w.-]*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret)[\w.-]*["']?\s*[:=]\s*["']?([^\s"',;)}\]]{8,})/gi;
+const PLACEHOLDER = /^(?:<|\$|\*|%|\{|process\.env|os\.environ|env\.|getenv|redacted|example|changeme|placeholder|x{4,}|your[_-])/i;
+
+function luhn(digits) {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+function scanString(text) {
+  const kinds = [];
+  for (const [kind, re] of SENSITIVE_PATTERNS) if (re.test(text)) kinds.push(kind);
+  for (const m of text.matchAll(ASSIGNMENT)) {
+    if (/\d/.test(m[1]) && !PLACEHOLDER.test(m[1])) { kinds.push('password or secret assignment'); break; }
+  }
+  // Card numbers: 15 or 16 digits starting 3–6, optionally grouped, passing Luhn.
+  for (const m of text.matchAll(/\b[3-6]\d{3}(?:[ -]?\d{3,4}){3}\b/g)) {
+    const digits = m[0].replace(/\D/g, '');
+    if ((digits.length === 15 || digits.length === 16) && luhn(digits)) { kinds.push('card number'); break; }
+  }
+  return kinds;
+}
+
+/**
+ * Find values that look like credentials or card numbers anywhere in `value`.
+ * @returns {{ path: string, kind: string }[]} one entry per kind per location; never the matched text.
+ */
+export function findSensitive(value, path = '') {
+  const out = [];
+  const walk = (v, p) => {
+    if (typeof v === 'string') {
+      for (const kind of scanString(v)) out.push({ path: p || '(root)', kind });
+    } else if (Array.isArray(v)) {
+      v.forEach((x, i) => walk(x, `${p}[${i}]`));
+    } else if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) {
+        for (const kind of scanString(k)) out.push({ path: `${p ? p + '.' : ''}${k} (key)`, kind });
+        walk(x, p ? `${p}.${k}` : k);
+      }
+    }
+  };
+  walk(value, path);
+  return out;
+}
+
+function allowSensitive() {
+  return ['1', 'true', 'yes'].includes(String(process.env.JEV_ALLOW_SENSITIVE ?? '').toLowerCase());
+}
+
+function sensitiveError(findings) {
+  const list = findings.slice(0, 5).map((f) => `${f.kind} in ${f.path}`).join('; ');
+  const more = findings.length > 5 ? `; and ${findings.length - 5} more` : '';
+  const err = new JevError('sensitive', `Refused to send (sensitive): the request looks like it contains sensitive data (${list}${more}). Nothing was sent. Remove or mask these values, for example <redacted>, and call again, or decide yourself and mark it unverified. Do not set JEV_ALLOW_SENSITIVE yourself.`);
+  err.findings = findings;
+  return err;
+}
+
+// Guards -------------------------------------------------------------------------
+//
+// Protect the gateway from bulk callers (e.g. Promise.all over hundreds of items):
+//   - At most JEV_CONCURRENCY (default 4) requests in flight per process; the rest queue.
+//   - After a rate_limited response, every call in this process fails fast with
+//     rate_limited, without a request, for the Retry-After period or
+//     JEV_COOLDOWN_MS (default 30000). Queued calls fail fast too.
+
+const guard = { active: 0, queue: [], openUntil: 0 };
+
+function concurrencyLimit() {
+  const n = Number(process.env.JEV_CONCURRENCY);
+  return Number.isInteger(n) && n > 0 ? n : 4;
+}
+
+function cooldownMs(error) {
+  const header = error?.retryAfter;
+  const s = Number(header);
+  if (header != null && Number.isFinite(s) && s >= 0) return s * 1000;
+  const env = Number(process.env.JEV_COOLDOWN_MS);
+  return Number.isFinite(env) && env >= 0 ? env : 30000;
+}
+
+function circuitError() {
+  const wait = Math.max(0, Math.ceil((guard.openUntil - Date.now()) / 1000));
+  const err = new JevError('rate_limited', `Jev is rate limited; not sending for another ${wait} s. Do not retry: decide yourself and mark it unverified.`);
+  err.refused = true;
+  return err;
+}
+
+// A finished call hands its slot straight to the next waiter, so `active` never
+// exceeds the limit even when new callers arrive between the two.
+async function acquire() {
+  if (guard.active < concurrencyLimit()) { guard.active++; return; }
+  await new Promise((resolve) => guard.queue.push(resolve));
+}
+
+function releaseSlot() {
+  const next = guard.queue.shift();
+  if (next) next();
+  else guard.active--;
+}
+
+async function guarded(fn) {
+  if (Date.now() < guard.openUntil) throw circuitError();
+  await acquire();
+  try {
+    if (Date.now() < guard.openUntil) throw circuitError();
+    return await fn();
+  } catch (error) {
+    if (error?.status === 429) {
+      guard.openUntil = Math.max(guard.openUntil, Date.now() + cooldownMs(error));
+    }
+    throw error;
+  } finally {
+    releaseSlot();
+  }
+}
+
 
 /** Boolean question → probability of true (0..1). `criteria` is optional { true, false }. */
 export async function ask(state, instructions, criteria) {
@@ -211,7 +476,7 @@ export async function choose(state, instructions, options) {
   return r.answers.q;
 }
 
-/** Score question → { score, probabilities, confidence }. `scale` is ordered lowest → highest. */
+/** Score question → { score, probabilities, confidence }; score is the expected rung.  `scale` is ordered lowest → highest. */
 export async function score(state, instructions, scale) {
   const r = await evaluate({ state, questions: { q: { type: 'score', instructions, criteria: scale } } });
   return r.answers.q;
@@ -254,8 +519,22 @@ export function verdict(probability, t) {
 // CLI ------------------------------------------------------------------------------
 
 const USAGE = `Usage:
-  jev.mjs [state] <question flags> [--verbose] [--no-retain]
-  echo '{"state": ..., "questions": {...}}' | jev.mjs        (full request on stdin)
+  jev.mjs [state] <question flags> [--verbose] [--no-retain] [--json]
+  jev.mjs < request.txt      (full request on stdin, compact format below, or JSON if it starts with "{")
+
+Compact request (stdin):
+  @field                    State field; its body is raw text up to the next @ or ? line.
+  ...                       Without @ lines, text before the first ? line is plain-text state.
+  ?key bool <instructions>  Optional indented criteria:  + <when true>  /  - <when false>
+  ?key choice <instr>       Indented options, one per line:  name: description
+  ?key score <instr>        Indented rungs, lowest first:  a | b | c  (or one per line)
+  A line starting @@ or ?? is a literal line starting @ or ?.
+
+Compact answers (stdout, one line per question):
+  key yes .91                       boolean: verdict, probability
+  key bug .72 c=.55 | feature .2 ...   choice: pick, its probability, confidence | the others
+  key 2/3 .81 c=.74 e=1.9 | 1:.15 ...  score: likeliest rung/max, its probability, confidence,
+                                    e= expected rung | the others
 
 State (give exactly one; if none, stdin is used):
   --state <text>            Inline text
@@ -272,8 +551,9 @@ Questions (repeatable; keys default to q1, q2, ... unless written as key=instruc
   Note: --options and --scale are comma-separated; commas inside a description are not supported.
 
 Options:
-  --verbose                 Print { answers, usage, requestId } instead of just answers
-  --no-retain               Ask the service not to retain the input (best effort)
+  --json                    Print JSON answers instead of compact lines
+  --verbose                 Also print usage and requestId
+  --no-retain               Ask the gateway not to retain the input (best effort, not a privacy guarantee)
   --timeout <ms>            Give up after this many ms (default ${DEFAULT_TIMEOUT_MS}, env JEV_TIMEOUT_MS)
   --thresholds <high,low>   Decision thresholds for boolean answers (default ${DEFAULT_THRESHOLDS.high},${DEFAULT_THRESHOLDS.low},
                             env JEV_THRESHOLD_HIGH / JEV_THRESHOLD_LOW). Each boolean answer gets a
@@ -281,7 +561,11 @@ Options:
   --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_CONCURRENCY, JEV_COOLDOWN_MS, JEV_ALLOW_SENSITIVE, JEV_SESSION_ID (optional)
+
+Everything in state and questions is sent to a third party. Never include secrets, credentials,
+personal data or confidential material. Requests that look like they contain credentials or card
+numbers are refused before sending (error code sensitive).
 
 Exit codes: 0 ok, 1 error (message on stderr)`;
 
@@ -327,6 +611,7 @@ async function main(argv) {
   if (has('-h') || has('--help')) { console.log(USAGE); return; }
 
   const verbose = has('--verbose');
+  const json = has('--json');
   const retain = !has('--no-retain');
   const provider = next('--provider');
   const timeoutArg = next('--timeout');
@@ -383,7 +668,9 @@ async function main(argv) {
     const stdin = await readStdin();
     if (!stdin.trim()) throw new Error('No state given. See --help.');
     if (Object.keys(questions).length === 0) {
-      const req = JSON.parse(stdin);
+      const req = stdin.trimStart().startsWith('{')
+        ? JSON.parse(stdin)
+        : (await import('./compact.mjs')).parseCompact(stdin);
       state = req.state;
       Object.assign(questions, req.questions || {});
     } else {
@@ -393,11 +680,20 @@ async function main(argv) {
 
   if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}\n\n${USAGE}`);
 
-  const result = await evaluate({ state, questions, retain, timeoutMs, provider });
+  const result = await evaluate({ state, questions, retain, timeoutMs, provider, caller: 'cli' });
   for (const a of Object.values(result.answers)) {
     if (a.type === 'boolean') a.verdict = verdict(a.probability, t);
   }
-  console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
+  if (json) {
+    console.log(JSON.stringify(verbose ? result : result.answers, null, 2));
+    return;
+  }
+  const { formatCompact } = await import('./compact.mjs');
+  console.log(formatCompact(result.answers));
+  if (verbose) {
+    const u = result.usage || {};
+    console.log(`# in=${u.inputTokens ?? '?'} out=${u.outputTokens ?? '?'} id=${result.requestId ?? '?'}`);
+  }
 }
 
 async function isCli() {

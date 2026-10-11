@@ -1,13 +1,13 @@
 ---
 name: jev
-description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it whenever you must decide, compare, rank, classify, verify, gate, or grade something you can put into text or JSON, in any domain. Not for generating, explaining, or open-ended questions. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "verify", "grade", "rank", "classify", "triage", "judge", "jev".
+description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it whenever you must decide, compare, rank, classify, verify, gate, or grade something you can put into text or JSON, in any domain. Not for generating, explaining, or open-ended questions. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "verify", "grade", "rank", "classify", "triage", "judge", "jev", "ask jev", "use jev", "bcj", "better call jev".
 ---
 
 # Jev: a judgement primitive
 
 Jev is an evaluation model. Give it evidence (`state`: text, an object, or an array) and one or more typed questions, and it returns calibrated probabilities instead of prose. It does not generate, explain, or reason aloud. It judges. That makes it a building block: almost any decision can be decomposed into a few typed questions over the right evidence, and the answers can be acted on directly by code or by you.
 
-When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
+This plugin exists so that you, the agent, can call Jev easily for your own decisions. Nothing routes your decisions through it automatically: use it when the user asks you to ("ask jev", "use bcj", "run it through Jev", or the same in their CLAUDE.md), and for the rest of the task when they say so. This file is the reference for using the primitive well, on any kind of problem.
 
 ## The method
 
@@ -19,11 +19,52 @@ Every use of Jev is the same three moves.
    - `choice`: one of a small named set. Describe each option; the descriptions are what Jev matches against. Add `other` when the input may fit none.
    - `score`: a position on an ordered rubric. Label every rung concretely, lowest first.
    If you cannot bound the answer, it is not yet a judgement. Enumerate the candidates first, then ask.
-3. **Act on the number.** A boolean at or above 0.8 is a decided yes, at or below 0.2 a decided no. The CLI applies this for you: every boolean answer carries a `verdict` of `yes`, `no`, or `undecided`. A choice with a clear leader is decided. Anything undecided means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding. The 0.8 / 0.2 pair is a default; the user can move it with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW` or per call with `--thresholds`. Do not change it yourself unless the user asks.
+3. **Act on the number.** A boolean at or above 0.8 is a decided yes, at or below 0.2 a decided no. The CLI applies this for you: every boolean line starts with its verdict, `yes`, `no`, or `undecided`. A choice or score is decided when its pick has at least twice the probability of the runner-up; otherwise it is a close race. Anything undecided means the question was too broad or the evidence too thin: split the question, add evidence, or report the uncertainty as the finding. The 0.8 / 0.2 pair is a default; the user can move it with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW` or per call with `--thresholds`. Do not change it yourself unless the user asks.
 
 Batch every question you have about the same evidence into one call. Name the keys after the decision, not `q1`.
 
-Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage under 2 means expand; otherwise ship.
+## What never goes into a request
+
+Everything in `state`, `instructions` and `criteria` is sent to a third party, which may keep it. Never include secrets (credentials, keys, tokens, passwords, `.env` contents), personal data, customer or user data, or anything the user called confidential. When the evidence contains them, send only the parts that do not, or replace the values with placeholders such as `<redacted>` and keep the structure. If the judgement needs the sensitive values themselves, make it without Jev and mark it unverified. `--no-retain` is best effort, not a privacy guarantee.
+
+The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before sending anything. The check is a backstop that catches obvious credentials only. Passing it does not make a request safe. Treat a `sensitive` error as a sign you broke the rule above: mask the values and call again, or decide yourself. Never set `JEV_ALLOW_SENSITIVE` yourself; only the user may.
+
+## Writing good questions
+
+This section and the next adapt the question-design guidance in TypeSafe's official skill ([typesafe-ai/skills](https://github.com/typesafe-ai/skills/blob/main/skills/typesafe-ai/SKILL.md), MIT) to Jev calls you make yourself.
+
+- **One narrow judgement per question.** Split dimensions that matter on their own (correct, in scope, tested) into separate questions over the same state. Narrow does not mean trivial: "which of these three fixes addresses the reported cause" is one coherent judgement.
+- **Keys are invisible to Jev.** Only `state`, `instructions` and `criteria` reach the model. `risky` as a key with instructions "Rate it" asks nothing; put the full meaning in the instructions.
+- **Point at the evidence.** With structured state, name the field in backticks: "Does `diff` implement what `request` asks?". Nested paths such as `ticket.messages[0].text` work too.
+- **Criteria define the answers.** The instructions ask; the criteria say what each answer means. Every score rung must describe a concrete situation that stands on its own, not "somewhat better than the previous rung". Criteria can be structured objects when definitions, exclusions, or examples make the boundary clearer.
+- **Keep a way out.** Jev cannot pick an option you did not list. Add `none` or `other` when nothing may fit. When checking whether a value is in the evidence, make sure the candidates you offer actually include it.
+- **Ask independent questions together.** Questions in one call run in parallel and cannot see each other's answers. Asking something you may not need (a follow-up that only matters if the first answer is yes) is fine: state its premise in the instructions and ignore the answer if it does not apply. Make a second call only when the first answer changes what evidence to gather or which options exist.
+
+## Reading the answers
+
+The CLI prints one line per question, in the order asked, each starting with the question's key:
+
+```
+safe yes .93                              boolean: verdict, probability of true
+team billing .71 c=.64 | infra .22 other .07   choice: pick, its probability, confidence | the other options
+risk 2/3 .58 c=.49 e=1.82 | 1:.3 3:.12     score: likeliest rung/max, its probability, confidence, expected rung | other rungs as rung:p
+```
+
+- Rungs are numbered from 0 in the order you listed them, lowest first. `2/3` means the likeliest rung is the third of four; `0/3` is the lowest, `3/3` the highest.
+- `e=` is the expected rung, the probability-weighted average from 0 to max (the `score` field in JSON). It is not a rung: `e=.99` with `1/3 .88` means rung 1 with a little weight either side. Use the likeliest rung to act on a single answer and `e=` to compare or sort answers.
+- The runners-up after `|` are sorted by probability. Options below 0.005 are left out; a line with no `|` means the pick took essentially all the probability.
+- Numbers are rounded to two decimals with the leading zero dropped: `.07` is 0.07, `1` is certainty.
+- A line whose answer is a JSON object is an answer type the formatter does not know. Read it as JSON.
+- Acting on it: `safe yes .93` means act; `safe undecided .55` means narrow the question or add evidence. `team billing .71 | infra .22` is decided (more than twice the runner-up); `team billing .48 | infra .41` is a close race to report, not a pick to act on.
+
+- **A boolean near 0.5 means "can't tell", not "partly true".** It is not a measure of degree. Use a `score` for degree.
+- **Confidence on a choice or score measures how peaked the distribution is.** It is not permission to act. Two options that are both acceptable split the probability; a low confidence between harmless alternatives is fine to act on.
+- **Ignore uncertainty in answers you do not use.** A speculative question that came back undecided on a branch you did not take needs no follow-up.
+- **Keep the raw numbers.** Changing how you weigh or combine answers does not need a new call if the evidence and questions are unchanged. Combine with explicit rules: a weighted average for trade-offs, but "any serious problem blocks" needs one boolean per problem, not an average.
+- **A typed answer is well formed, not necessarily true.** When a wrong answer is costly, check a few cases where you already know the outcome, and escalate undecided cases to the user rather than forcing them.
+- **When an answer looks wrong, find out which part failed:** missing evidence, a badly worded question, the model, or your own logic. Fix that part; do not just ask the same question again.
+
+Worked example. The vague problem is "is this summary any good?". Isolate the evidence: `{ source, summary }`. Bound the answers: `faithful` as a boolean with criteria true "every claim in the summary is supported by the source" and false "at least one claim is unsupported or contradicted"; `coverage` as a score over "misses the main point", "main point only", "main point and key details", "nothing important missing". Act: faithful below 0.2 means rewrite; coverage with `e=` under 2 means expand; otherwise ship.
 
 ## Decomposition patterns
 
@@ -35,13 +76,13 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 **Compare two.** State is `{ a, b, goal }`. Ask a `choice` between `a` and `b` with the goal as instructions, or a `boolean` "Is a better than b for the goal?" Prefer the choice; its probabilities tell you how close the race is.
 
-**Rank many.** One `score` question with the same rubric, one call per item, then sort by `score`. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
+**Rank many.** One `score` question per item, all with the same rubric, batched into one call with the items in `state` under their keys. Then sort by `e=`, the expected rung, which breaks ties that the likeliest rung cannot. For a small set, a single `choice` across all items also works. Do not ask Jev to output an ordering; it cannot.
 
 **Classify.** One `choice` with a category per option and an `other`. For multi-label, one `boolean` per label instead.
 
 **Grade on a rubric.** `score` with the rubric rungs as criteria. State is `{ rubric, submission }`. Read `confidence` to see how peaked the distribution is; a low confidence with a middling score means the rubric or the submission is ambiguous.
 
-**Detect.** "Does this contain X?" as a boolean with criteria describing X. Use for secrets in a diff, PII in a record, an unanswered question in a thread, a contradiction between two statements, a hallucinated claim in a summary.
+**Detect.** "Does this contain X?" as a boolean with criteria describing X. Use for an unanswered question in a thread, a contradiction between two statements, a hallucinated claim in a summary, a breaking change in a diff. Never use it to look for secrets or personal data: that sends them to Jev. Use local tools such as a secret scanner for that.
 
 **Attribute cause.** State is `{ before, change, symptom }`. A `choice` over candidate causes, or a boolean "Was the symptom caused by the change?"
 
@@ -55,7 +96,7 @@ These turn common problem shapes into Jev questions. Combine them freely.
 
 **Text.** Draft meets the brief (verify). Tone fit (choice). Two passages contradict, or a summary adds unsupported claims (detect).
 
-**Data.** Record is a duplicate (detect). Category of a transaction or event (classify). Quality on a rubric (grade). Value plausible given neighbours (boolean).
+**Data.** Only for data with no personal or customer information in it. Record is a duplicate (detect). Category of a transaction or event (classify). Quality on a rubric (grade). Value plausible given neighbours (boolean).
 
 **Plans.** Requirement is testable, two requirements conflict (detect). Best approach under stated constraints (compare). Request is ambiguous: "would two reasonable people implement this differently in a way that matters" (gate).
 
@@ -73,6 +114,14 @@ These turn common problem shapes into Jev questions. Combine them freely.
 - It is a model, not an oracle. When something can be computed or executed, do that instead and use Jev for what cannot be run.
 - Probabilities are calibrated in general, not for your domain. Tune thresholds on your own examples if a decision is high-stakes.
 
+## Degraded service
+
+Jev must never slow you down. On a `timeout`, `unavailable`, or `rate_limited` error, do not retry that call: decide it yourself and mark the decision unverified in your report. If two consecutive calls fail this way, stop calling Jev for the rest of the session, say so once, and mark every later judgement unverified.
+
+## Reporting
+
+When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls.
+
 ## Calling it
 
 Requires Node 18+ and `JEV_API_KEY` in the environment. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
@@ -85,24 +134,42 @@ Requires Node 18+ and `JEV_API_KEY` in the environment. The script is `scripts/j
 
 If the key only lives in a `.env` file, run `env $(cat .env) node ...` in one command. That is the only place the provider matters; nothing else in this skill depends on it.
 
-Prefer the stdin JSON form. It handles multi-line evidence, structured state, and criteria without quoting problems.
+Prefer the compact form on stdin. It handles multi-line evidence, structured state, and criteria with nothing to quote or escape, and costs far fewer tokens than JSON.
 
 ```bash
 node scripts/jev.mjs <<'EOF'
-{
-  "state": { "spec": "<the request or brief>", "artifact": "<the diff, draft, or output>" },
-  "questions": {
-    "satisfies":  { "type": "boolean", "instructions": "Does the artifact fully satisfy the spec?" },
-    "overreaches": { "type": "boolean", "instructions": "Does the artifact do things the spec did not ask for?" },
-    "quality": {
-      "type": "score",
-      "instructions": "Overall quality of the artifact against the spec",
-      "criteria": ["unusable", "needs major rework", "needs minor fixes", "ready"]
-    }
-  }
-}
+@spec
+<the request or brief>
+@artifact
+<the diff, draft, or output, raw>
+?satisfies bool Does `artifact` fully satisfy `spec`?
+ + every requirement in spec is met
+ - at least one requirement is missing
+?overreaches bool Does `artifact` do things `spec` did not ask for?
+?kind choice What kind of change is this?
+ bug: fixes existing behaviour
+ feature: adds a capability
+ other: none of these fit
+?quality score Overall quality of `artifact` against `spec`
+ unusable | needs major rework | needs minor fixes | ready
 EOF
 ```
+
+- `@key` starts a state field; its body is raw text up to the next line starting with `@` or `?`. Without any `@` line, the text before the first `?` line is plain-text state.
+- `?key type instructions` declares a question: `bool`, `choice`, or `score`. Indented lines under it are the criteria: `+` / `-` lines for a bool (both or neither), `name: description` per choice option, rungs lowest first for a score, split on `|` or one per line.
+- A line in the evidence that starts with `@` or `?` must be doubled (`@@`, `??`); the first character is dropped. Diff hunk headers are the common case: `@@ -1 +1 @@` becomes `@@@ -1 +1 @@`.
+- Stdin starting with `{` is still read as a JSON request `{ state, questions }`.
+
+The answer is one line per question:
+
+```
+satisfies yes .91
+overreaches no .07
+kind bug .72 c=.55 | feature .2 other .08
+quality 3/3 .81 c=.74 e=2.76 | 2:.15 1:.03
+```
+
+A boolean gives its verdict and probability. A choice gives the pick, its probability and `c=` its confidence, then the other options. A score gives the likeliest rung over the top rung (`rung/max`), that rung's probability, `c=` its confidence and `e=` the expected rung, then the other rungs as `rung:p`. Options below 0.005 are left out. `--json` prints the full JSON answers instead.
 
 Pipe evidence in when the question is simple:
 
@@ -113,22 +180,26 @@ cat draft.md | node scripts/jev.mjs --bool "Does this answer the question in its
 
 Flags:
 
-- State, exactly one: `--state <text>`, `--state-file <path>` (a `.json` path is parsed as structured state), `--state-json <json>`. With none, stdin is the state text when question flags are present, otherwise a full request `{state, questions}`.
+- State, exactly one: `--state <text>`, `--state-file <path>` (a `.json` path is parsed as structured state), `--state-json <json>`. With none, stdin is the state text when question flags are present, otherwise a full request in the compact form (or JSON if it starts with `{`).
 - Questions, repeatable, keys default to `q1`, `q2` unless written `key=instructions`: `--bool "<q>"`, `--choice "<q>" --options "a=desc,b=desc"`, `--score "<q>" --scale "low,mid,high"`, `--questions <json>` to merge a raw object.
 - `--options` and `--scale` are comma-separated; use the JSON form if a description contains a comma.
-- `--verbose` prints `{ answers, usage, requestId }`. `--no-retain` asks the service not to retain the input.
+- `--json` prints JSON answers instead of compact lines. `--verbose` adds a `# in=… out=… id=…` usage line (with `--json`: `{ answers, usage, requestId }`). `--no-retain` asks the gateway not to retain the input; this is best effort, not a privacy guarantee.
 - `--timeout <ms>` gives up after that long (default 8000, or env `JEV_TIMEOUT_MS`). A timeout exits 1 with code `timeout`. Never retry in a loop; fall back to your own judgement and mark the decision unverified.
 - `--thresholds <high,low>` sets the decision thresholds for boolean answers (default `0.8,0.2`, or env `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`). The flag beats the env. Use it only when the user has asked for a different cut-off, for example a stricter gate on a destructive action.
 - `--provider <name>` selects the gateway (default `vercel`, or env `JEV_PROVIDER`). Only `vercel` exists today; an unknown name exits 1 with `bad_request` and lists the supported ones. Leave it unset unless the user asks for a specific gateway.
-- Output is JSON on stdout. Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `unavailable`, `timeout`, `unknown`. `--help` prints everything.
+- Output is compact lines on stdout (JSON with `--json`). Errors exit 1 with a message on stderr prefixed by a code: `auth`, `bad_request`, `rate_limited`, `sensitive`, `unavailable`, `timeout`, `unknown`. `sensitive` means nothing was sent because the request looked like it contained credentials; mask them and retry, or decide yourself. `--help` prints everything.
 
 Answer shapes:
 
-| Type | Give | Get |
-|---|---|---|
-| `boolean` | `instructions`, optional `criteria: {true, false}` | `probability` 0..1, and from the CLI `verdict`: `yes` / `no` / `undecided` |
-| `choice` | `instructions`, `criteria: {name: description}` | `choice`, `probabilities`, `confidence` |
-| `score` | `instructions`, `criteria: [lowest, ..., highest]` | `score` 0..n-1, `probabilities` keyed `"0".."n-1"`, `confidence` |
+| Type | Give (compact) | Get (compact line) | Get (`--json` and module) |
+|---|---|---|---|
+| `boolean` | `?key bool …`, optional ` + true` / ` - false` lines | `key <verdict> <p>` | `probability` 0..1, and from the CLI `verdict`: `yes` / `no` / `undecided` |
+| `choice` | `?key choice …`, ` name: description` lines | `key <pick> <p> c=<conf> \| <name> <p> …` | `choice`, `probabilities`, `confidence` |
+| `score` | `?key score …`, rungs lowest first | `key <rung>/<max> <p> c=<conf> e=<expected> \| <rung>:<p> …` | `score` = expected rung 0..n-1 (a float), `probabilities` keyed `"0".."n-1"`, `confidence` |
+
+The CLI prints compact lines by default; `--json` gives the JSON shapes. Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the rules above (batch per evidence, no retries, stop after repeated failures) apply unchanged.
+
+Many items (tens or hundreds) are not many calls. First narrow them without Jev: filter, dedupe, or sample. Then put several items into one call as an array or keyed object, with one question per item or a `choice`/`score` over the set. Never fan out with `Promise.all`. The client allows only 4 requests in flight per process (`JEV_CONCURRENCY`). After a `rate_limited` error it refuses every further call in that process for the cooldown (`Retry-After`, else `JEV_COOLDOWN_MS`, default 30 s), so a burst fails fast rather than finishing.
 
 As a module from Node code:
 
@@ -136,7 +207,7 @@ As a module from Node code:
 import { evaluate, ask, choose, score, verdict, thresholds, JevError } from './scripts/jev.mjs';
 await ask(state, instructions, criteria?);                // number
 await choose(state, instructions, { name: desc });       // { choice, probabilities, confidence }
-await score(state, instructions, [low, ..., high]);       // { score, probabilities, confidence }
+await score(state, instructions, [low, ..., high]);       // { score (expected rung), probabilities, confidence }
 await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answers, usage, requestId }
 verdict(probability, thresholds?);                         // 'yes' | 'no' | 'undecided' under the defaults or env
 thresholds({ high?, low? });                               // resolved { high, low }, validated
