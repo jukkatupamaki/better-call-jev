@@ -1,14 +1,9 @@
 {
-  "description": "Loads the Jev decision protocol into every session so all judgment calls are routed through Jev.",
+  "description": "Exports the Claude Code session id so logged Jev calls are tagged with it. Prints nothing.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "cat \"${CLAUDE_PLUGIN_ROOT}/hooks/protocol.md\"",
-            "timeout": 5
-          },
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-env.mjs\"",

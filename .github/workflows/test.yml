@@ -52,6 +52,5 @@ jobs:
             if (m.plugins[0].name !== p.name) throw new Error("plugin name mismatch between manifests");
             if (!h.hooks?.SessionStart) throw new Error("hooks.json missing SessionStart");
             if (!fs.existsSync("skills/jev/SKILL.md")) throw new Error("skills/jev/SKILL.md missing");
-            if (!fs.existsSync("hooks/protocol.md")) throw new Error("hooks/protocol.md missing");
             console.log(`ok: ${p.name}@${p.version}`);
           '

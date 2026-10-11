@@ -1,13 +1,13 @@
 ---
 name: jev
-description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it whenever you must decide, compare, rank, classify, verify, gate, or grade something you can put into text or JSON, in any domain. Not for generating, explaining, or open-ended questions. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "verify", "grade", "rank", "classify", "triage", "judge", "jev".
+description: Low-level judgement primitive. Turns any question with a bounded answer into a calibrated probability, a choice among named options, or a score on a rubric, in a few hundred ms. Use it whenever you must decide, compare, rank, classify, verify, gate, or grade something you can put into text or JSON, in any domain. Not for generating, explaining, or open-ended questions. Triggers on "should I", "which", "is this", "does this match", "how good", "how risky", "verify", "grade", "rank", "classify", "triage", "judge", "jev", "ask jev", "use jev", "bcj", "better call jev".
 ---
 
 # Jev: a judgement primitive
 
 Jev is an evaluation model. Give it evidence (`state`: text, an object, or an array) and one or more typed questions, and it returns calibrated probabilities instead of prose. It does not generate, explain, or reason aloud. It judges. That makes it a building block: almost any decision can be decomposed into a few typed questions over the right evidence, and the answers can be acted on directly by code or by you.
 
-This plugin exists so that you, the agent, can call Jev easily for your own decisions. When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
+This plugin exists so that you, the agent, can call Jev easily for your own decisions. Nothing routes your decisions through it automatically: use it when the user asks you to ("ask jev", "use bcj", "run it through Jev", or the same in their CLAUDE.md), and for the rest of the task when they say so. This file is the reference for using the primitive well, on any kind of problem.
 
 ## The method
 
@@ -27,7 +27,7 @@ Batch every question you have about the same evidence into one call. Name the ke
 
 Everything in `state`, `instructions` and `criteria` is sent to a third party, which may keep it. Never include secrets (credentials, keys, tokens, passwords, `.env` contents), personal data, customer or user data, or anything the user called confidential. When the evidence contains them, send only the parts that do not, or replace the values with placeholders such as `<redacted>` and keep the structure. If the judgement needs the sensitive values themselves, make it without Jev and mark it unverified. `--no-retain` is best effort, not a privacy guarantee.
 
-The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before sending anything. The check is a backstop that catches obvious credentials only. Passing it does not make a request safe. Never set `JEV_ALLOW_SENSITIVE` yourself.
+The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before sending anything. The check is a backstop that catches obvious credentials only. Passing it does not make a request safe. Treat a `sensitive` error as a sign you broke the rule above: mask the values and call again, or decide yourself. Never set `JEV_ALLOW_SENSITIVE` yourself; only the user may.
 
 ## Writing good questions
 
@@ -114,6 +114,14 @@ These turn common problem shapes into Jev questions. Combine them freely.
 - It is a model, not an oracle. When something can be computed or executed, do that instead and use Jev for what cannot be run.
 - Probabilities are calibrated in general, not for your domain. Tune thresholds on your own examples if a decision is high-stakes.
 
+## Degraded service
+
+Jev must never slow you down. On a `timeout`, `unavailable`, or `rate_limited` error, do not retry that call: decide it yourself and mark the decision unverified in your report. If two consecutive calls fail this way, stop calling Jev for the rest of the session, say so once, and mark every later judgement unverified.
+
+## Reporting
+
+When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls.
+
 ## Calling it
 
 Requires Node 18+ and `JEV_API_KEY` in the environment. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
@@ -189,7 +197,7 @@ Answer shapes:
 | `choice` | `?key choice …`, ` name: description` lines | `key <pick> <p> c=<conf> \| <name> <p> …` | `choice`, `probabilities`, `confidence` |
 | `score` | `?key score …`, rungs lowest first | `key <rung>/<max> <p> c=<conf> e=<expected> \| <rung>:<p> …` | `score` = expected rung 0..n-1 (a float), `probabilities` keyed `"0".."n-1"`, `confidence` |
 
-The CLI prints compact lines by default; `--json` gives the JSON shapes. Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the protocol (batch per evidence, no retries, stop after repeated failures) applies unchanged.
+The CLI prints compact lines by default; `--json` gives the JSON shapes. Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the rules above (batch per evidence, no retries, stop after repeated failures) apply unchanged.
 
 Many items (tens or hundreds) are not many calls. First narrow them without Jev: filter, dedupe, or sample. Then put several items into one call as an array or keyed object, with one question per item or a `choice`/`score` over the set. Never fan out with `Promise.all`. The client allows only 4 requests in flight per process (`JEV_CONCURRENCY`). After a `rate_limited` error it refuses every further call in that process for the cooldown (`Retry-After`, else `JEV_COOLDOWN_MS`, default 30 s), so a burst fails fast rather than finishing.
 

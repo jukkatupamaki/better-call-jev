@@ -58,7 +58,7 @@
         "Choice questions returning the pick, the full distribution and confidence",
         "Score questions on a labelled rubric returning the rung and confidence",
         "CLI, ES module API and Claude Code skill in one file",
-        "Session hook that routes every judgement call in Claude Code through Jev",
+        "Ask Claude to use Jev for one decision, a whole task, or by default from CLAUDE.md",
         "No npm install, no dependencies"
       ],
       "author": { "@id": "https://bettercalljev.com/#author" },
@@ -105,7 +105,7 @@
         {
           "@type": "Question",
           "name": "What does the plugin change about how Claude Code behaves?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Every judgement call is routed through Jev: which option, whether an action is safe, whether a diff matches the request, whether a task is done. A SessionStart hook installs this. Remove it to keep only the skill." }
+          "acceptedAnswer": { "@type": "Answer", "text": "It adds the Jev skill. Claude uses it when you ask: \"ask jev whether this is safe\", \"use bcj for this task\", or /jev. Put the request in CLAUDE.md to make it the default. Nothing is routed through Jev automatically." }
         },
         {
           "@type": "Question",
@@ -484,7 +484,7 @@
     <h2 class="serif">Give Claude a threshold, not a hunch.</h2>
   </div>
   <div class="why-grid">
-    <p class="r"><b>Every judgement call goes through Jev.</b> A session hook installs the protocol: anything not mechanically determined by the evidence is asked as a typed question. Which option. Whether an action is safe. Whether the diff does what was asked and nothing more. Whether the task is done. A number has a threshold. Intuition does not.</p>
+    <p class="r"><b>Say "ask jev", and the judgement call goes through Jev.</b> For one decision, a whole task, or every session from your CLAUDE.md: anything not mechanically determined by the evidence is asked as a typed question. Which option. Whether an action is safe. Whether the diff does what was asked and nothing more. Whether the task is done. A number has a threshold. Intuition does not.</p>
     <div class="steps r">
       <div class="step"><div class="n">01</div><div class="b"><b>Isolate the evidence.</b><span>The diff, the draft, the two candidates. Jev sees only what is in <code>state</code>.</span></div></div>
       <div class="step"><div class="n">02</div><div class="b"><b>Bound the answer.</b><span>Rewrite the question as a boolean, a choice, or a score. If it cannot be bounded, it is not yet a judgement.</span></div></div>
@@ -655,7 +655,7 @@ overreaches no .07</span>
   <div class="r">
     <details><summary>What is Better Call Jev?</summary><p>A Claude Code plugin that returns calibrated probabilities instead of prose. Zero dependencies. The model is Jev, by TypeSafe AI.</p></details>
     <details><summary>What is Jev?</summary><p>TypeSafe AI's evaluation model. Given evidence and typed questions, it returns calibrated probabilities in a few hundred milliseconds. It does not generate.</p></details>
-    <details><summary>What does the plugin change about Claude Code?</summary><p>Every judgement call is routed through Jev: which option, whether an action is safe, whether a diff matches the request, whether a task is done. A SessionStart hook installs this. Remove it to keep only the skill.</p></details>
+    <details><summary>What does the plugin change about Claude Code?</summary><p>It adds the Jev skill. Claude uses it when you ask: "ask jev whether this is safe", "use bcj for this task", or <code>/jev</code>. Put the request in your CLAUDE.md to make it the default. Nothing is routed through Jev automatically.</p></details>
     <details><summary>What do I need to run it?</summary><p>Node 18 and a Vercel AI Gateway key in <code>JEV_API_KEY</code>.</p></details>
     <details><summary>Can I change the 0.8 / 0.2 cut-offs?</summary><p>Yes. They are defaults. Set <code>JEV_THRESHOLD_HIGH</code> and <code>JEV_THRESHOLD_LOW</code> next to the API key, or pass <code>--thresholds 0.9,0.1</code> on one call. Every boolean answer then reports <code>yes</code>, <code>no</code>, or <code>undecided</code> against your numbers.</p></details>
     <details><summary>Why are the answers not JSON?</summary><p>Tokens. The CLI reads and prints a compact line format: <code>@field</code> lines for evidence, <code>?key bool</code> / <code>choice</code> / <code>score</code> lines for questions, and one answer line each, such as <code>safe yes .93</code> or <code>risk 2/3 .58 c=.49 e=1.82 | 1:.3 3:.12</code>. It carries the same numbers as JSON at a fraction of the tokens. JSON still works in and out, with <code>--json</code>.</p></details>

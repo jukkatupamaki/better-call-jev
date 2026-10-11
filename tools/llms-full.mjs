@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Regenerate site/llms-full.txt from README.md, skills/jev/SKILL.md and
-// hooks/protocol.md, so the LLM-facing copy never drifts from the sources.
+// Regenerate site/llms-full.txt from README.md and skills/jev/SKILL.md, so the
+// LLM-facing copy never drifts from the sources.
 //
 //   node tools/llms-full.mjs           write the file
 //   node tools/llms-full.mjs --check   exit 1 if the file is out of date
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8').trim();
 
-export function build({ readme, skill, protocol }) {
+export function build({ readme, skill }) {
   const readmeBody = readme.replace(/^# /, '### ');
   const skillBody = skill.replace(/^---\n[\s\S]*?\n---\n+/, '');
   return [
@@ -32,17 +32,11 @@ export function build({ readme, skill, protocol }) {
     '',
     skillBody,
     '',
-    '---',
-    '',
-    '## hooks/protocol.md',
-    '',
-    protocol,
-    '',
   ].join('\n');
 }
 
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
-const out = isCli ? build({ readme: read('README.md'), skill: read('skills/jev/SKILL.md'), protocol: read('hooks/protocol.md') }) : null;
+const out = isCli ? build({ readme: read('README.md'), skill: read('skills/jev/SKILL.md') }) : null;
 const target = join(ROOT, 'site', 'llms-full.txt');
 
 if (!isCli) {

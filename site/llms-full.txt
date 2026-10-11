@@ -15,7 +15,9 @@ Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation m
 - `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
 - `skills/jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
 - `.claude-plugin/` holds the plugin manifest and a single-plugin marketplace, so this repo installs directly.
-- `hooks/` holds a SessionStart hook that loads `hooks/protocol.md` into every session. With the plugin installed, Claude delegates all judgment calls to Jev rather than deciding by intuition. Remove or edit the hook if you want the skill available without the always-on rule.
+- `hooks/` holds a silent SessionStart hook that exports the session id, so logged calls can be grouped by session. It adds nothing to Claude's context.
+
+Claude uses Jev when you ask it to: "ask jev whether this is safe", "use bcj for the judgement calls in this task", or `/jev`. To make that the default, say so in your `CLAUDE.md`, for example "Run judgement calls through Jev (better-call-jev)".
 
 ## Setup
 
@@ -35,11 +37,11 @@ Every Jev call sends its `state`, `instructions` and `criteria` to Vercel AI Gat
 
 What the plugin does about it:
 
-- **Instructions.** The session protocol and the skill tell the agent never to send secrets, credentials, personal data, customer data, or anything you called confidential. The agent masks such values or decides without Jev. Jev is never to be used to scan for secrets or personal data.
+- **Instructions.** The skill tells the agent never to send secrets, credentials, personal data, customer data, or anything you called confidential. The agent masks such values or decides without Jev. Jev is never to be used to scan for secrets or personal data.
 - **A client-side block.** Before sending, the client scans the whole request for private keys, common API key and token formats (AWS, GitHub, Slack, OpenAI and Anthropic style, Stripe, Google), JWTs, `password=`/`secret=` style assignments, and card numbers. On a match it sends nothing and fails with error code `sensitive`, naming the kind and location but not the value. This is a backstop for obvious credentials. It does not detect personal data or business secrets. `JEV_ALLOW_SENSITIVE=1` turns it off; agents are told never to set it.
 - **A local log only.** The call log (see `skills/jev-stats`) stays on your machine. Blocked requests are logged without their content. `JEV_LOG=meta` stops storing request state, `JEV_LOG=off` stops logging.
 
-The session protocol makes the agent use Jev for most decisions, which means a lot of your work passes through it. To keep only the skill and stop the automatic routing, remove the protocol's `SessionStart` entry from `hooks/hooks.json`.
+How much of your work passes through Jev depends on how often you ask Claude to use it. A standing instruction in `CLAUDE.md` sends a lot more than an occasional "ask jev".
 
 ## Install
 
@@ -145,7 +147,7 @@ Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketpl
 
 The landing page at [bettercalljev.com](https://bettercalljev.com) is the static `site/` folder, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it.
 
-`site/llms-full.txt` is generated from this README, `skills/jev/SKILL.md` and `hooks/protocol.md`. After editing any of them, run `node tools/llms-full.mjs`; CI fails if it is out of date.
+`site/llms-full.txt` is generated from this README and `skills/jev/SKILL.md`. After editing either, run `node tools/llms-full.mjs`; CI fails if it is out of date.
 
 The social card `site/og.png` is rendered from `tools/og.html`, which mirrors the hero. Edit the HTML and regenerate it with `node tools/og.mjs` (needs `playwright` and a Chromium; set `CHROMIUM` to reuse one you already have). Keep its terminal transcript in step with the hero animation.
 
@@ -157,7 +159,7 @@ The social card `site/og.png` is rendered from `tools/og.html`, which mirrors th
 
 Jev is an evaluation model. Give it evidence (`state`: text, an object, or an array) and one or more typed questions, and it returns calibrated probabilities instead of prose. It does not generate, explain, or reason aloud. It judges. That makes it a building block: almost any decision can be decomposed into a few typed questions over the right evidence, and the answers can be acted on directly by code or by you.
 
-This plugin exists so that you, the agent, can call Jev easily for your own decisions. When this plugin is loaded, a session hook also installs a protocol that routes your judgement calls through Jev. This file is the reference for using the primitive well, on any kind of problem.
+This plugin exists so that you, the agent, can call Jev easily for your own decisions. Nothing routes your decisions through it automatically: use it when the user asks you to ("ask jev", "use bcj", "run it through Jev", or the same in their CLAUDE.md), and for the rest of the task when they say so. This file is the reference for using the primitive well, on any kind of problem.
 
 ## The method
 
@@ -177,7 +179,7 @@ Batch every question you have about the same evidence into one call. Name the ke
 
 Everything in `state`, `instructions` and `criteria` is sent to a third party, which may keep it. Never include secrets (credentials, keys, tokens, passwords, `.env` contents), personal data, customer or user data, or anything the user called confidential. When the evidence contains them, send only the parts that do not, or replace the values with placeholders such as `<redacted>` and keep the structure. If the judgement needs the sensitive values themselves, make it without Jev and mark it unverified. `--no-retain` is best effort, not a privacy guarantee.
 
-The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before sending anything. The check is a backstop that catches obvious credentials only. Passing it does not make a request safe. Never set `JEV_ALLOW_SENSITIVE` yourself.
+The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before sending anything. The check is a backstop that catches obvious credentials only. Passing it does not make a request safe. Treat a `sensitive` error as a sign you broke the rule above: mask the values and call again, or decide yourself. Never set `JEV_ALLOW_SENSITIVE` yourself; only the user may.
 
 ## Writing good questions
 
@@ -264,6 +266,14 @@ These turn common problem shapes into Jev questions. Combine them freely.
 - It is a model, not an oracle. When something can be computed or executed, do that instead and use Jev for what cannot be run.
 - Probabilities are calibrated in general, not for your domain. Tune thresholds on your own examples if a decision is high-stakes.
 
+## Degraded service
+
+Jev must never slow you down. On a `timeout`, `unavailable`, or `rate_limited` error, do not retry that call: decide it yourself and mark the decision unverified in your report. If two consecutive calls fail this way, stop calling Jev for the rest of the session, say so once, and mark every later judgement unverified.
+
+## Reporting
+
+When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls.
+
 ## Calling it
 
 Requires Node 18+ and `JEV_API_KEY` in the environment. The script is `scripts/jev.mjs` next to this file, for example `~/.claude/skills/jev/scripts/jev.mjs` or the plugin's install path.
@@ -339,7 +349,7 @@ Answer shapes:
 | `choice` | `?key choice …`, ` name: description` lines | `key <pick> <p> c=<conf> \| <name> <p> …` | `choice`, `probabilities`, `confidence` |
 | `score` | `?key score …`, rungs lowest first | `key <rung>/<max> <p> c=<conf> e=<expected> \| <rung>:<p> …` | `score` = expected rung 0..n-1 (a float), `probabilities` keyed `"0".."n-1"`, `confidence` |
 
-The CLI prints compact lines by default; `--json` gives the JSON shapes. Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the protocol (batch per evidence, no retries, stop after repeated failures) applies unchanged.
+The CLI prints compact lines by default; `--json` gives the JSON shapes. Use the CLI for your own decisions. The module is for code that ships with Jev built in, not a way to script around the rules above: every call from it is still one judgement, and the rules above (batch per evidence, no retries, stop after repeated failures) apply unchanged.
 
 Many items (tens or hundreds) are not many calls. First narrow them without Jev: filter, dedupe, or sample. Then put several items into one call as an array or keyed object, with one question per item or a `choice`/`score` over the set. Never fan out with `Promise.all`. The client allows only 4 requests in flight per process (`JEV_CONCURRENCY`). After a `rate_limited` error it refuses every further call in that process for the cooldown (`Retry-After`, else `JEV_COOLDOWN_MS`, default 30 s), so a burst fails fast rather than finishing.
 
@@ -354,60 +364,3 @@ await evaluate({ state, questions, retain?, timeoutMs?, provider? }); // { answe
 verdict(probability, thresholds?);                         // 'yes' | 'no' | 'undecided' under the defaults or env
 thresholds({ high?, low? });                               // resolved { high, low }, validated
 ```
-
----
-
-## hooks/protocol.md
-
-# Jev decision protocol (active for this session)
-
-The `better-call-jev` plugin is loaded. In this session you do not make judgment calls yourself. Every decision you would otherwise settle by intuition is delegated to Jev, a fast evaluation model that returns calibrated probabilities over options you declare. You frame the options and gather the evidence; Jev decides; you act on the result.
-
-## The rule
-
-Before you act on any decision that is not mechanically determined by the evidence or the user's explicit words, run it through Jev. This applies to every kind of task, not only code. It includes, without exception:
-
-- which of several options, approaches, locations, or candidates to pick
-- whether an action is safe to take without asking the user
-- whether a request is ambiguous enough to ask a question back
-- whether what you produced satisfies the request, and whether it does more than asked
-- what caused a failure, error, or discrepancy
-- whether something needs a further step: a test, a citation, a review, a follow-up
-- whether a subagent's or tool's result answers its brief before you relay or act on it
-- how to classify, prioritise, rank, or route anything
-- whether a claim is supported by the evidence you have
-- whether you are done, before you report completion
-
-A decision is "mechanically determined" only when the evidence, a command's output, or the user's words leave exactly one option. Everything else goes to Jev. The skill `jev` documents decomposition patterns (gate, verify, compare, rank, classify, grade, detect, attribute, narrow, self-check) and how to apply them per domain.
-
-## What never goes to Jev
-
-Everything you put in `state`, `instructions` or `criteria` is sent to a third party, which may keep it. This rule overrides the one above. Never send:
-
-- secrets: credentials, API keys, tokens, passwords, private keys, connection strings, `.env` contents
-- personal data: names tied to other details, contact details, addresses, identifiers, health, financial or account data
-- customer or user data, and anything the user has called confidential, private or internal
-
-If the evidence for a decision contains any of these, cut it down to the parts that do not, or replace the values with placeholders such as `<redacted>` and keep the structure. If the decision cannot be made without them, decide it yourself and mark it unverified. Never use Jev to find secrets or personal data: that means sending them. `--no-retain` is a best-effort request to the gateway, not a privacy guarantee.
-
-The client refuses requests that look like they contain credentials or card numbers, with error code `sensitive`, before anything is sent. Treat that as a signal that you broke this rule: mask the values and call again, or decide yourself. Never set `JEV_ALLOW_SENSITIVE`; only the user may. The check only catches obvious credentials, so passing it does not make a request safe.
-
-## How
-
-1. Gather the evidence first. Jev cannot read files or run commands. Put the actual diff, output, or text into `state`, one `@field` per piece, such as `@request`, `@diff`, `@testOutput`, after removing anything listed under "What never goes to Jev".
-2. Declare the options as a typed question. `boolean` for yes/no, `choice` for one of several named options, `score` for a position on a rubric you label rung by rung.
-3. Batch every question you have about the same evidence into one call. Do not write scripts that loop over or `Promise.all` many Jev calls: narrow the candidates first, then batch them into a few calls. The client caps concurrency and stops after a rate limit.
-4. Call the script with the compact request on stdin (`@field` evidence, `?key type instructions` questions). It answers one line per question. The skill `jev` (invoke as `/better-call-jev:jev` or `/jev`) has the full reference, patterns, and per-domain recipes.
-5. Act on the answer. Each answer is one line starting with its key. A boolean line gives a verdict, `yes`, `no`, or `undecided`, then the probability (`safe yes .93`), from thresholds that default to 0.8 / 0.2 and that the user can change with `JEV_THRESHOLD_HIGH` / `JEV_THRESHOLD_LOW`. Act on `yes` and `no`. On `undecided`, narrow the question or gather more evidence and ask again. A choice or score line gives the pick, its probability, `c=` confidence, and the runners-up after `|`; a score's pick is the likeliest rung written `rung/max`, numbered from 0, and `e=` is the expected rung. The pick decides when it has at least twice the runner-up's probability; a closer race is itself a finding to report to the user.
-
-## What Jev cannot do
-
-Jev picks among options you declare. Generating code, prose, or an open-ended answer is not a decision and stays with you. When you are unsure what the options even are, list the candidates first, then ask Jev to choose.
-
-## Reporting
-
-When a Jev answer determined what you did, say so in one sentence with the probability. Do not narrate routine calls.
-
-## Degraded service
-
-Jev must never slow you down. Calls time out after 8 seconds by default and exit with code `timeout`. On a `timeout`, `unavailable`, or `rate_limited` error: do not retry that call, decide it yourself, and mark the decision unverified in your report. If two consecutive calls fail this way, stop calling Jev for the rest of the session, say so once, and mark every later judgment unverified. If `JEV_API_KEY` is missing, tell the user once how to get and set one, as described in the skill's "If the key is missing" section: it is a Vercel AI Gateway API key from the Vercel dashboard, set as `JEV_API_KEY` in the shell profile, in `~/.claude/settings.json`, or in the project's gitignored `.claude/settings.local.json`. Then proceed the same way until it is set.
