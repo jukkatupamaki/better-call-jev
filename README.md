@@ -97,7 +97,7 @@ team billing .93 c=.87 | other .07
 urgency 2/3 .61 c=.52 e=1.79 | 1:.3 3:.09
 ```
 
-`@key` starts a state field whose body runs to the next `@` or `?` line; lines of evidence starting with `@` or `?` are written doubled. A score shows the likeliest rung as `rung/max`, numbered from 0, and `e=` the expected rung. Stdin starting with `{` is still read as a JSON request, and `--json` prints JSON answers. `skills/jev/SKILL.md` has the full reference.
+`@key` starts a state field whose body runs to the next `@` or `?` line; lines of evidence starting with `@` or `?` are written doubled. A score shows the likeliest rung as `rung/max`, numbered from 0, and `e=` the expected rung. Stdin starting with `{` is read as a JSON request, and `--json` prints JSON answers. `skills/jev/SKILL.md` has the full reference.
 
 ## Tests
 
@@ -141,4 +141,4 @@ The landing page at [bettercalljev.com](https://bettercalljev.com) is the static
 
 `site/llms-full.txt` is generated from this README and `skills/jev/SKILL.md`. After editing either, run `node tools/llms-full.mjs`; CI fails if it is out of date.
 
-The social card `site/og.png` is rendered from `tools/og.html`, which mirrors the hero. Edit the HTML and regenerate it with `node tools/og.mjs` (needs `playwright` and a Chromium; set `CHROMIUM` to reuse one you already have). Keep its terminal transcript in step with the hero animation.
+The social card `site/og.png` is rendered from `tools/og.html`, which mirrors the hero. Edit the HTML and regenerate it with `node tools/og.mjs` (needs `playwright` and a Chromium; set `CHROMIUM` to reuse one you already have). Keep its headline and answer line in step with the hero in `site/index.html`.
