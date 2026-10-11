@@ -2,38 +2,17 @@
 
 [![test](https://github.com/jukkatupamaki/better-call-jev/actions/workflows/test.yml/badge.svg)](https://github.com/jukkatupamaki/better-call-jev/actions/workflows/test.yml)
 
-Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation model, packaged as a Claude Code plugin.
+A Claude Code plugin that lets Claude decide judgement calls by a number instead of a hunch: it asks [TypeSafe AI's Jev](https://typesafe.ai) evaluation model a yes/no, pick-one or rate-it question about the evidence and acts on the calibrated probability it gets back.
 
-- `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
-- `skills/jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
-- `.claude-plugin/` holds the plugin manifest and a single-plugin marketplace, so this repo installs directly.
-- `hooks/` holds a silent SessionStart hook that exports the session id as `JEV_SESSION_ID`, for Claude Code versions that do not set `CLAUDE_CODE_SESSION_ID` in Bash. Logged calls are grouped by session. It adds nothing to Claude's context.
+```
+> /jev is the customer asking for a refund?
+  refund undecided .31
+  0.31, undecided. Not acting on it as a refund request — asking what they want.
+```
+
+At or above 0.8 is yes, at or below 0.2 is no; in between, Claude splits the question or adds evidence. One file, zero dependencies, Node 18+. More examples at [bettercalljev.com](https://bettercalljev.com).
 
 Claude uses Jev when you ask it to: "ask jev whether this is safe", "use bcj for the judgement calls in this task", or `/jev`. To make that the default, say so in your `CLAUDE.md`, for example "Run judgement calls through Jev (better-call-jev)".
-
-## Setup
-
-Set `JEV_API_KEY` in your environment. Never commit it. Options:
-
-- shell profile: `export JEV_API_KEY=...`
-- per project, gitignored: `.claude/settings.local.json` with `{ "env": { "JEV_API_KEY": "..." } }`
-- for the quick check below: a gitignored `.env` file (see `.env.example`)
-
-Decision thresholds: every boolean answer from the CLI starts with a verdict (`yes`, `no`, `undecided`) computed from two cut-offs that default to 0.8 and 0.2. Move them for your own risk tolerance with `JEV_THRESHOLD_HIGH` and `JEV_THRESHOLD_LOW` in the same places as the key, or per call with `--thresholds 0.9,0.1`.
-
-Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
-
-## Data handling
-
-Every Jev call sends its `state`, `instructions` and `criteria` to Vercel AI Gateway and TypeSafe AI. Treat anything in a request as shared with them and possibly kept: check their terms, which may give them rights to use what you send. `--no-retain` asks the gateway for zero data retention, but it is best effort and not a privacy guarantee.
-
-What the plugin does about it:
-
-- **Instructions.** The skill tells the agent never to send secrets, credentials, personal data, customer data, or anything you called confidential. The agent masks such values or decides without Jev. Jev is never to be used to scan for secrets or personal data.
-- **A client-side block.** Before sending, the client scans the whole request for private keys, common API key and token formats (AWS, GitHub, Slack, OpenAI and Anthropic style, Stripe, Google), JWTs, `password=`/`secret=` style assignments, and card numbers. On a match it sends nothing and fails with error code `sensitive`, naming the kind and location but not the value. This is a backstop for obvious credentials. It does not detect personal data or business secrets. `JEV_ALLOW_SENSITIVE=1` turns it off; agents are told never to set it.
-- **A local log only.** The call log (see `skills/jev-stats`) stays on your machine. Blocked requests are logged without their content. `JEV_LOG=meta` stops storing request state, `JEV_LOG=off` stops logging.
-
-How much of your work passes through Jev depends on how often you ask Claude to use it. A standing instruction in `CLAUDE.md` sends a lot more than an occasional "ask jev".
 
 ## Install
 
@@ -63,6 +42,30 @@ ln -s "$(pwd)/skills/jev" ~/.claude/skills/jev
 ```bash
 cp -r skills/jev /path/to/project/.claude/skills/jev
 ```
+
+## Setup
+
+Set `JEV_API_KEY` in your environment. Never commit it. Options:
+
+- shell profile: `export JEV_API_KEY=...`
+- per project, gitignored: `.claude/settings.local.json` with `{ "env": { "JEV_API_KEY": "..." } }`
+- for the quick check below: a gitignored `.env` file (see `.env.example`)
+
+Decision thresholds: every boolean answer from the CLI starts with a verdict (`yes`, `no`, `undecided`) computed from two cut-offs that default to 0.8 and 0.2. Move them for your own risk tolerance with `JEV_THRESHOLD_HIGH` and `JEV_THRESHOLD_LOW` in the same places as the key, or per call with `--thresholds 0.9,0.1`.
+
+Provider note: requests are currently served through Vercel AI Gateway, so the key is an AI Gateway key from your Vercel account. Nothing in the CLI, module API, or output depends on this, and the transport can change without affecting callers.
+
+## Data handling
+
+Every Jev call sends its `state`, `instructions` and `criteria` to Vercel AI Gateway and TypeSafe AI. Treat anything in a request as shared with them and possibly kept: check their terms, which may give them rights to use what you send. `--no-retain` asks the gateway for zero data retention, but it is best effort and not a privacy guarantee.
+
+What the plugin does about it:
+
+- **Instructions.** The skill tells the agent never to send secrets, credentials, personal data, customer data, or anything you called confidential. The agent masks such values or decides without Jev. Jev is never to be used to scan for secrets or personal data.
+- **A client-side block.** Before sending, the client scans the whole request for private keys, common API key and token formats (AWS, GitHub, Slack, OpenAI and Anthropic style, Stripe, Google), JWTs, `password=`/`secret=` style assignments, and card numbers. On a match it sends nothing and fails with error code `sensitive`, naming the kind and location but not the value. This is a backstop for obvious credentials. It does not detect personal data or business secrets. `JEV_ALLOW_SENSITIVE=1` turns it off; agents are told never to set it.
+- **A local log only.** The call log (see `skills/jev-stats`) stays on your machine. Blocked requests are logged without their content. `JEV_LOG=meta` stops storing request state, `JEV_LOG=off` stops logging.
+
+How much of your work passes through Jev depends on how often you ask Claude to use it. A standing instruction in `CLAUDE.md` sends a lot more than an occasional "ask jev".
 
 ## Quick check
 
@@ -98,6 +101,13 @@ urgency 2/3 .61 c=.52 e=1.79 | 1:.3 3:.09
 ```
 
 `@key` starts a state field whose body runs to the next `@` or `?` line; lines of evidence starting with `@` or `?` are written doubled. A score shows the likeliest rung as `rung/max`, numbered from 0, and `e=` the expected rung. Stdin starting with `{` is read as a JSON request, and `--json` prints JSON answers. `skills/jev/SKILL.md` has the full reference.
+
+## Repository layout
+
+- `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
+- `skills/jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
+- `.claude-plugin/` holds the plugin manifest and a single-plugin marketplace, so this repo installs directly.
+- `hooks/` holds a silent SessionStart hook that exports the session id as `JEV_SESSION_ID`, for Claude Code versions that do not set `CLAUDE_CODE_SESSION_ID` in Bash. Logged calls are grouped by session. It adds nothing to Claude's context.
 
 ## Tests
 
