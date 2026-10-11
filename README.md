@@ -7,7 +7,7 @@ Zero-dependency client for [TypeSafe AI's Jev](https://typesafe.ai) evaluation m
 - `skills/jev/SKILL.md` describes the skill to Claude and documents the CLI and module API.
 - `skills/jev/scripts/jev.mjs` is the client: a CLI and an ES module. Node 18+, no npm install.
 - `.claude-plugin/` holds the plugin manifest and a single-plugin marketplace, so this repo installs directly.
-- `hooks/` holds a silent SessionStart hook that exports the session id, so logged calls can be grouped by session. It adds nothing to Claude's context.
+- `hooks/` holds a silent SessionStart hook that exports the session id as `JEV_SESSION_ID`, for Claude Code versions that do not set `CLAUDE_CODE_SESSION_ID` in Bash. Logged calls are grouped by session. It adds nothing to Claude's context.
 
 Claude uses Jev when you ask it to: "ask jev whether this is safe", "use bcj for the judgement calls in this task", or `/jev`. To make that the default, say so in your `CLAUDE.md`, for example "Run judgement calls through Jev (better-call-jev)".
 

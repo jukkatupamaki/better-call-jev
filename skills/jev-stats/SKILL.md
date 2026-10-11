@@ -1,6 +1,6 @@
 ---
 name: jev-stats
-description: Summarise how Jev has been used, from the local call log. Shows call counts, errors, latency, undecided rates, bursts and repeated questions, per session or over a time window, and points out what to change. Use when asked about Jev stats, usage, the call log, why calls failed or were rate limited, or how well Jev questions are working. Triggers on "jev stats", "jev usage", "jev log", "how is jev doing".
+description: Summarise how Jev has been used, from the local call log. Shows call counts, errors, latency, undecided rates, bursts and repeated questions, per session or over a time window, and points out what to change. Also cleans the log. Use when asked about Jev stats, usage, the call log, why calls failed or were rate limited, how well Jev questions are working, or to clear or prune the log. Triggers on "jev stats", "jev usage", "jev log", "how is jev doing", "clean jev log".
 ---
 
 # Jev stats
@@ -8,20 +8,33 @@ description: Summarise how Jev has been used, from the local call log. Shows cal
 Every Jev call is logged locally as JSONL. Never read those files directly: raw JSON costs far more tokens than it tells you. Use the reader, which prints short, bounded text:
 
 ```bash
-node <plugin root>/skills/jev/scripts/log.mjs summary              # start here
+node <plugin root>/skills/jev/scripts/log.mjs summary --session current   # start here
 node <plugin root>/skills/jev/scripts/log.mjs summary --since 7d
 node <plugin root>/skills/jev/scripts/log.mjs sessions
 node <plugin root>/skills/jev/scripts/log.mjs list --undecided     # one line per call
 node <plugin root>/skills/jev/scripts/log.mjs show <id prefix>     # one call in full
 ```
 
-The script is `../jev/scripts/log.mjs` relative to this file (the plugin root is `$CLAUDE_PLUGIN_ROOT`). Filters for every command: `--since 30m|2h|7d`, `--session <id|current>`, `--status <s>`, `--caller cli|module`, `--undecided`, `--limit <n>`. `--help` lists everything.
+The script is `../jev/scripts/log.mjs` relative to this file (the plugin root is `$CLAUDE_PLUGIN_ROOT`). Filters for every command: `--since 30m|2h|7d`, `--session <id|current>` (`current` is this Claude Code session), `--status <s>`, `--caller cli|module`, `--undecided`, `--limit <n>`. `--help` lists everything.
 
 ## How to answer
 
-1. Run `summary`, with `--since` or `--session current` if the user asked about a period or this session.
+1. Run `summary --session current` by default. Drop `--session` only when the user asks about all calls, another session, or a period (then use `--since`). If it says `no calls match`, say so and offer the all-time summary.
 2. Drill down only as far as the question needs: `sessions` to find where something happened, `list` with filters to see the calls, `show` for one call. Keep `--limit` small.
 3. Report the few numbers that matter and what they mean. Do not paste the whole output back.
+
+## Cleaning the log
+
+`clean` deletes calls and needs a selector so it never wipes everything by accident:
+
+```bash
+node <plugin root>/skills/jev/scripts/log.mjs clean --older-than 30d --dry-run   # count first
+node <plugin root>/skills/jev/scripts/log.mjs clean --older-than 30d
+node <plugin root>/skills/jev/scripts/log.mjs clean --session current
+node <plugin root>/skills/jev/scripts/log.mjs clean --all
+```
+
+Several selectors (`--older-than`, `--session`, `--status`) narrow it down together. Deleting cannot be undone: run with `--dry-run` first, tell the user how many calls it would remove, and run it for real only when they asked for exactly that.
 
 ## Reading the numbers
 

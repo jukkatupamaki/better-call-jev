@@ -195,6 +195,12 @@ export async function logDir() {
   return join(homedir(), '.local', 'state', 'better-call-jev');
 }
 
+// The session a call belongs to. Claude Code exports CLAUDE_CODE_SESSION_ID to every
+// Bash command; JEV_SESSION_ID overrides it for other callers.
+export function sessionId() {
+  return process.env.JEV_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || null;
+}
+
 export function logFileName(date) {
   return `calls-${date.toISOString().slice(0, 7)}.jsonl`;
 }
@@ -219,12 +225,12 @@ async function logCall({ id, startedAt, t0, state, questions, retain, provider, 
   // Calls the guard refused never reached the service. A burst can produce
   // hundreds of them, so they get a minimal record that is only worth counting.
   if (error?.refused) {
-    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'refused' });
+    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: sessionId(), caller, status: 'refused' });
     return;
   }
   // Blocked for sensitive data: never write the request, not even locally.
   if (error?.code === 'sensitive') {
-    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: process.env.JEV_SESSION_ID || null, caller, status: 'sensitive', findings: error.findings });
+    await writeLog({ v: LOG_SCHEMA_VERSION, id, ts: startedAt.toISOString(), session: sessionId(), caller, status: 'sensitive', findings: error.findings });
     return;
   }
   try {
@@ -236,7 +242,7 @@ async function logCall({ id, startedAt, t0, state, questions, retain, provider, 
       ts: startedAt.toISOString(),
       endTs: new Date().toISOString(),
       latencyMs: Math.round((performance.now() - t0) * 10) / 10,
-      session: process.env.JEV_SESSION_ID || null,
+      session: sessionId(),
       caller,
       provider: provider || process.env.JEV_PROVIDER || DEFAULT_PROVIDER,
       level,
@@ -561,7 +567,7 @@ Options:
   --provider <name>         Gateway to use (default ${DEFAULT_PROVIDER}, env JEV_PROVIDER). Supported: ${listProviders().join(', ')}
   -h, --help
 
-Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_CONCURRENCY, JEV_COOLDOWN_MS, JEV_ALLOW_SENSITIVE, JEV_SESSION_ID (optional)
+Env: JEV_API_KEY (required), JEV_PROVIDER, JEV_TIMEOUT_MS, JEV_THRESHOLD_HIGH, JEV_THRESHOLD_LOW, JEV_ENDPOINT, JEV_LOG (full|meta|off), JEV_LOG_DIR, JEV_CONCURRENCY, JEV_COOLDOWN_MS, JEV_ALLOW_SENSITIVE, JEV_SESSION_ID (optional, defaults to CLAUDE_CODE_SESSION_ID)
 
 Everything in state and questions is sent to a third party. Never include secrets, credentials,
 personal data or confidential material. Requests that look like they contain credentials or card

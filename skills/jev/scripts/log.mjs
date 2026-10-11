@@ -6,21 +6,24 @@
 // the files, filters, aggregates, and prints short, bounded text. Pass --json for
 // machine-readable output.
 
-import { createReadStream, readdirSync } from 'node:fs';
+import { createReadStream, readdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { logDir, thresholds, verdict } from './jev.mjs';
+import { logDir, sessionId, thresholds, verdict } from './jev.mjs';
 
 const USAGE = `Usage:
   log.mjs summary  [filters]   One screen of numbers: status, latency, undecided rates, bursts, repeats
   log.mjs list     [filters]   One line per call, newest last (default --limit 20)
   log.mjs show     <id>        One call in full; an id prefix is enough. --max <n> caps long values (default 400)
   log.mjs sessions [filters]   One line per session
+  log.mjs clean    <selector>  Delete calls from the log. Needs --all, --older-than, --session or --status;
+                               several narrow it down. --dry-run only counts
 
 Filters:
   --since <n>(m|h|d)           Only calls in the last n minutes, hours or days
-  --session <id|current>       One session; "current" reads JEV_SESSION_ID
+  --session <id|current>       One session; "current" is this Claude Code session
+  --older-than <n>(m|h|d)      Only calls older than that (mainly for clean)
   --status <s>                 ok, refused, sensitive, rate_limited, timeout, auth, bad_request, unavailable, unknown
   --caller <cli|module>
   --undecided                  Only calls with at least one undecided boolean
@@ -31,13 +34,16 @@ Env: JEV_LOG_DIR (log location, see jev.mjs), JEV_THRESHOLD_HIGH / JEV_THRESHOLD
 
 // Reading ------------------------------------------------------------------------
 
-async function* readRecords(dir, sinceMs) {
-  let files;
+function logFiles(dir) {
   try {
-    files = readdirSync(dir).filter((f) => /^calls-\d{4}-\d{2}\.jsonl$/.test(f)).sort();
+    return readdirSync(dir).filter((f) => /^calls-\d{4}-\d{2}\.jsonl$/.test(f)).sort();
   } catch {
-    return;
+    return [];
   }
+}
+
+async function* readRecords(dir, sinceMs) {
+  const files = logFiles(dir);
   // Monthly files: skip whole months that end before the window starts.
   const sinceMonth = sinceMs ? new Date(sinceMs).toISOString().slice(0, 7) : null;
   for (const f of files) {
@@ -66,6 +72,7 @@ function booleans(r, t) {
 
 function matches(r, f, t) {
   if (f.sinceMs && Date.parse(r.ts) < f.sinceMs) return false;
+  if (f.beforeMs && !(Date.parse(r.ts) < f.beforeMs)) return false;
   if (f.session && r.session !== f.session) return false;
   if (f.status && r.status !== f.status) return false;
   if (f.caller && r.caller !== f.caller) return false;
@@ -78,6 +85,31 @@ export async function load(dir, f, t) {
   for await (const r of readRecords(dir, f.sinceMs)) if (matches(r, f, t)) out.push(r);
   out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
   return out;
+}
+
+// Rewrites each monthly file without the matching records, and removes files left
+// empty. Lines that do not parse are kept: clean only deletes what it can identify.
+// The rewrite goes through a temp file and a rename, so a reader never sees half a file.
+export function clean(dir, f, t, { dryRun = false } = {}) {
+  let removed = 0;
+  let kept = 0;
+  for (const name of logFiles(dir)) {
+    const path = join(dir, name);
+    const lines = readFileSync(path, 'utf8').split('\n').filter((l) => l.trim());
+    const keep = lines.filter((line) => {
+      let r;
+      try { r = JSON.parse(line); } catch { return true; }
+      if (matches(r, f, t)) return false;
+      kept++;
+      return true;
+    });
+    removed += lines.length - keep.length;
+    if (dryRun || keep.length === lines.length) continue;
+    if (!keep.length) { unlinkSync(path); continue; }
+    writeFileSync(path + '.tmp', keep.join('\n') + '\n', { mode: 0o600 });
+    renameSync(path + '.tmp', path);
+  }
+  return { removed, kept, dryRun };
 }
 
 // Formatting helpers ---------------------------------------------------------------
@@ -289,12 +321,14 @@ async function main(argv) {
   const cmd = args.shift();
   const json = has('--json');
   const since = take('--since');
+  const olderThan = take('--older-than');
   let session = take('--session');
   if (session === 'current') {
-    session = process.env.JEV_SESSION_ID;
-    if (!session) throw new Error('--session current needs JEV_SESSION_ID (set by the plugin\'s SessionStart hook)');
+    session = sessionId();
+    if (!session) throw new Error('--session current needs CLAUDE_CODE_SESSION_ID or JEV_SESSION_ID; run it from a Claude Code session');
   }
-  const f = { sinceMs: since ? parseSince(since) : null, session, status: take('--status'), caller: take('--caller'), undecided: has('--undecided') };
+  const f = { sinceMs: since ? parseSince(since) : null, beforeMs: olderThan ? parseSince(olderThan) : null, session, status: take('--status'), caller: take('--caller'), undecided: has('--undecided'), all: has('--all') };
+  const dryRun = has('--dry-run');
   const limitArg = take('--limit');
   const limit = limitArg === undefined ? 20 : Number(limitArg);
   if (!Number.isInteger(limit) || limit < 0) throw new Error('--limit must be a whole number, 0 for no limit');
@@ -325,6 +359,12 @@ async function main(argv) {
     if (!hits.length) throw new Error(`No call with id ${id}`);
     if (hits.length > 1) throw new Error(`Id prefix ${id} matches ${hits.length} calls; give more characters`);
     return json ? console.log(JSON.stringify(hits[0])) : printShow(hits[0], t, max);
+  }
+  if (cmd === 'clean') {
+    if (!f.all && !f.beforeMs && !f.session && !f.status) throw new Error('clean needs --all, --older-than, --session or --status');
+    const c = clean(dir, f, t, { dryRun });
+    if (json) return console.log(JSON.stringify(c));
+    return console.log(`${c.dryRun ? 'would remove' : 'removed'} ${c.removed} call${c.removed === 1 ? '' : 's'} · ${c.kept} kept`);
   }
   throw new Error(`Unknown command "${cmd}"\n\n${USAGE}`);
 }

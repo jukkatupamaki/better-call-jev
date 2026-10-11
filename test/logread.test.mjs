@@ -94,13 +94,47 @@ test('filters: session, caller, since, undecided', async () => {
   assert.equal((await run(['list', '--since', '1h'], dir)).stdout.trim(), 'no calls match');
 });
 
-test('--session current reads JEV_SESSION_ID', async () => {
+test('--session current reads CLAUDE_CODE_SESSION_ID, and JEV_SESSION_ID overrides it', async () => {
   const dir = fixture();
-  const r = await run(['list', '--session', 'current'], dir, { JEV_SESSION_ID: 'old' });
+  const r = await run(['list', '--session', 'current'], dir, { CLAUDE_CODE_SESSION_ID: 'old' });
   assert.equal(r.stdout.trim().split('\n').length, 1);
+  const o = await run(['list', '--session', 'current'], dir, { CLAUDE_CODE_SESSION_ID: 'old', JEV_SESSION_ID: 's1' });
+  assert.equal(o.stdout.trim().split('\n').length, 2);
   const missing = await run(['list', '--session', 'current'], dir);
   assert.equal(missing.code, 1);
-  assert.match(missing.stderr, /JEV_SESSION_ID/);
+  assert.match(missing.stderr, /CLAUDE_CODE_SESSION_ID/);
+});
+
+const lineCount = (dir, f) => readFileSync(join(dir, f), 'utf8').trim().split('\n').length;
+
+test('clean --session removes only that session and keeps torn lines', async () => {
+  const dir = fixture();
+  const r = await run(['clean', '--session', 's2'], dir);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'removed 13 calls · 3 kept');
+  assert.equal(lineCount(dir, 'calls-2026-09.jsonl'), 3); // two s1 calls and the torn line
+  assert.equal((await run(['sessions'], dir)).stdout.trim().split('\n').length, 2);
+});
+
+test('clean --older-than drops whole months and --dry-run touches nothing', async () => {
+  const dir = fixture();
+  const before = Date.now() - Date.parse('2026-09-01T00:00:00Z');
+  const age = `${Math.floor(before / 3600e3)}h`;
+  const dry = await run(['clean', '--older-than', age, '--dry-run'], dir);
+  assert.equal(dry.stdout.trim(), 'would remove 1 call · 15 kept');
+  assert.deepEqual(readdirSync(dir).sort(), ['calls-2026-08.jsonl', 'calls-2026-09.jsonl']);
+  await run(['clean', '--older-than', age], dir);
+  assert.deepEqual(readdirSync(dir), ['calls-2026-09.jsonl']);
+});
+
+test('clean --all empties the log; clean without a selector is an error', async () => {
+  const dir = fixture();
+  const bare = await run(['clean'], dir);
+  assert.equal(bare.code, 1);
+  assert.match(bare.stderr, /--all/);
+  const r = await run(['clean', '--all', '--json'], dir);
+  assert.deepEqual(r.json, { removed: 16, kept: 0, dryRun: false });
+  assert.deepEqual(readdirSync(dir), ['calls-2026-09.jsonl']); // only the torn line is left
 });
 
 test('show finds a call by id prefix and prints it compactly', async () => {
